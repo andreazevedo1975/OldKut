@@ -8,24 +8,25 @@ interface FriendsPageProps {
     onAcceptRequest: (requesterId: number) => void;
     onRejectRequest: (requesterId: number) => void;
     onViewProfile: (userId: number) => void;
+    theme: { [key: string]: string };
 }
 
-const FriendsPage: React.FC<FriendsPageProps> = ({ friends, pendingRequests, onAcceptRequest, onRejectRequest, onViewProfile }) => {
+const FriendsPage: React.FC<FriendsPageProps> = ({ friends, pendingRequests, onAcceptRequest, onRejectRequest, onViewProfile, theme }) => {
     return (
         <div className="space-y-6">
             {pendingRequests.length > 0 && (
-                <div className="bg-white p-4 rounded-md border border-gray-300 shadow-sm">
-                    <h2 className="text-xl font-light text-gray-600 mb-4">
+                <div className={`${theme.panelBg} p-4 rounded-md border ${theme.panelBorder} shadow-sm`}>
+                    <h2 className={`text-xl font-light ${theme.subtleText} mb-4`}>
                         Pedidos de amizade pendentes ({pendingRequests.length})
                     </h2>
                     <div className="space-y-3">
                         {pendingRequests.map(user => (
-                            <div key={user.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-md">
+                            <div key={user.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-600 rounded-md">
                                 <div className="flex items-center space-x-3">
                                     <img src={user.profilePicUrl} alt={user.name} className="w-12 h-12 rounded-md" />
                                     <div>
-                                        <button onClick={() => onViewProfile(user.id)} className="text-sm font-bold text-[#3366CC] hover:underline">{user.name}</button>
-                                        <p className="text-xs text-gray-500">{user.city}</p>
+                                        <button onClick={() => onViewProfile(user.id)} className={`text-sm font-bold ${theme.link} hover:underline`}>{user.name}</button>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400">{user.city}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center space-x-2">
@@ -49,8 +50,8 @@ const FriendsPage: React.FC<FriendsPageProps> = ({ friends, pendingRequests, onA
                     </div>
                 </div>
             )}
-            <div className="bg-white p-4 rounded-md border border-gray-300 shadow-sm">
-                <h2 className="text-xl font-light text-gray-600 mb-4">
+            <div className={`${theme.panelBg} p-4 rounded-md border ${theme.panelBorder} shadow-sm`}>
+                <h2 className={`text-xl font-light ${theme.subtleText} mb-4`}>
                     Meus amigos ({friends.length})
                 </h2>
                 {friends.length > 0 ? (
@@ -60,12 +61,12 @@ const FriendsPage: React.FC<FriendsPageProps> = ({ friends, pendingRequests, onA
                                 <button onClick={() => onViewProfile(friend.id)} className="block mx-auto">
                                     <img src={friend.profilePicUrl} alt={friend.name} className="w-24 h-24 rounded-md" />
                                 </button>
-                                <button onClick={() => onViewProfile(friend.id)} className="text-sm text-[#3366CC] hover:underline mt-2 block w-full truncate">{friend.name}</button>
+                                <button onClick={() => onViewProfile(friend.id)} className={`text-sm ${theme.link} hover:underline mt-2 block w-full truncate`}>{friend.name}</button>
                             </div>
                         ))}
                     </div>
                 ) : (
-                    <p className="text-sm text-gray-500">Você ainda não tem amigos.</p>
+                    <p className={`text-sm ${theme.subtleText}`}>Você ainda não tem amigos.</p>
                 )}
             </div>
         </div>
