@@ -130,13 +130,13 @@ const ScrapWriter: React.FC<ScrapWriterProps> = ({ viewedUser, onAddScrap, theme
     };
 
     return (
-        <div className="bg-gray-100 p-3 rounded-md border border-gray-300">
-            <h3 className="font-bold text-sm text-gray-700 mb-2">Deixar um recado:</h3>
+        <div className={`${theme.subtleBg} p-3 rounded-md border ${theme.panelBorder}`}>
+            <h3 className={`font-bold text-sm ${theme.text} mb-2`}>Deixar um recado:</h3>
             <form onSubmit={handleSubmit}>
                 <textarea
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
-                    className="w-full h-20 p-2 border border-gray-400 rounded-sm text-sm focus:outline-none focus:ring-1 focus:ring-[#3366CC]"
+                    className={`w-full h-20 p-2 border ${theme.panelBorder} rounded-sm text-sm focus:outline-none focus:ring-1 focus:ring-[#3366CC] ${theme.inputBg} ${theme.text}`}
                     placeholder={`Escreva um recado para ${viewedUser.name.split(' ')[0]}...`}
                     maxLength={255}
                 />
@@ -169,13 +169,13 @@ const TestimonialWriter: React.FC<TestimonialWriterProps> = ({ viewedUser, onAdd
     };
 
     return (
-        <div className="bg-gray-100 p-3 rounded-md border border-gray-300 mb-4">
-            <h3 className="font-bold text-sm text-gray-700 mb-2">Escrever um depoimento:</h3>
+        <div className={`${theme.subtleBg} p-3 rounded-md border ${theme.panelBorder} mb-4`}>
+            <h3 className={`font-bold text-sm ${theme.text} mb-2`}>Escrever um depoimento:</h3>
             <form onSubmit={handleSubmit}>
                 <textarea
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
-                    className="w-full h-24 p-2 border border-gray-400 rounded-sm text-sm focus:outline-none focus:ring-1 focus:ring-[#3366CC]"
+                    className={`w-full h-24 p-2 border ${theme.panelBorder} rounded-sm text-sm focus:outline-none focus:ring-1 focus:ring-[#3366CC] ${theme.inputBg} ${theme.text}`}
                     placeholder={`Deixe um depoimento para ${viewedUser.name.split(' ')[0]}...`}
                 />
                 <div className="flex justify-end items-center mt-2">

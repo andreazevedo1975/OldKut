@@ -1,20 +1,23 @@
 import React, { useState } from 'react';
 import type { User } from '../types';
-import { SearchIcon } from './icons';
+import { SearchIcon, PaletteIcon } from './icons';
+import { THEMES } from '../App';
 
 interface HeaderProps {
     currentUser: User;
-    onNavigate: (page: 'profile' | 'friends' | 'communities') => void;
+    onNavigate: (page: 'profile' | 'friends' | 'communities' | 'posts') => void;
     onViewProfile: (userId: number) => void;
     pendingRequestsCount: number;
     allUsers: User[];
     onLogout: () => void;
+    onThemeChange: (themeKey: string) => void;
     theme: { [key: string]: string };
 }
 
-const Header: React.FC<HeaderProps> = ({ currentUser, onNavigate, onViewProfile, pendingRequestsCount, allUsers, onLogout, theme }) => {
+const Header: React.FC<HeaderProps> = ({ currentUser, onNavigate, onViewProfile, pendingRequestsCount, allUsers, onLogout, onThemeChange, theme }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [searchResults, setSearchResults] = useState<User[]>([]);
+    const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
 
     const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const term = e.target.value;
@@ -35,6 +38,11 @@ const Header: React.FC<HeaderProps> = ({ currentUser, onNavigate, onViewProfile,
         setSearchResults([]);
         onViewProfile(userId);
     };
+
+    const handleSelectTheme = (themeKey: string) => {
+        onThemeChange(themeKey);
+        setIsThemeMenuOpen(false);
+    };
     
     return (
         <header className={`${theme.header} ${theme.headerText} shadow-md`}>
@@ -51,7 +59,7 @@ const Header: React.FC<HeaderProps> = ({ currentUser, onNavigate, onViewProfile,
                         value={searchTerm}
                         onChange={handleSearchChange}
                         onBlur={() => setTimeout(() => setSearchResults([]), 200)}
-                        className={`block w-full ${theme.bg === 'bg-gray-800' ? 'bg-gray-700 text-white' : 'bg-pink-50 text-gray-900'} rounded-md py-1.5 pl-10 pr-3 focus:outline-none focus:ring-2 focus:ring-white`}
+                        className={`block w-full ${theme.inputBg} ${theme.text} rounded-md py-1.5 pl-10 pr-3 focus:outline-none focus:ring-2 focus:ring-white`}
                     />
                     {searchResults.length > 0 && (
                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-10 max-h-60 overflow-y-auto">
@@ -72,6 +80,7 @@ const Header: React.FC<HeaderProps> = ({ currentUser, onNavigate, onViewProfile,
                 <div className="flex items-center">
                     <nav className="flex items-center space-x-6">
                         <button onClick={() => onNavigate('profile')} className="hover:opacity-80">Início</button>
+                        <button onClick={() => onNavigate('posts')} className="hover:opacity-80">Posts</button>
                         <button onClick={() => onNavigate('friends')} className="relative hover:opacity-80">
                             Amigos
                             {pendingRequestsCount > 0 && (
@@ -86,6 +95,34 @@ const Header: React.FC<HeaderProps> = ({ currentUser, onNavigate, onViewProfile,
                         <div className="flex items-center space-x-2">
                             <img src={currentUser.avatarUrl} alt={currentUser.name} className="w-6 h-6 rounded-full" />
                             <span className="text-sm">{currentUser.name}</span>
+                        </div>
+                         <div className="relative">
+                            <button onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)} className="hover:opacity-80">
+                                <PaletteIcon className="w-5 h-5" />
+                            </button>
+                            {isThemeMenuOpen && (
+                                <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-20" onMouseLeave={() => setIsThemeMenuOpen(false)}>
+                                    <div className={`p-2 text-xs font-bold ${theme.panelBorder} border-b text-gray-500`}>
+                                        Mudar o tema
+                                    </div>
+                                    <ul className="py-1">
+                                        {Object.entries({classic: 'Azul Clássico', pink: 'Rosa Vibrante', green: 'Verde Sereno', dark: 'Modo Escuro'}).map(([key, name]) => (
+                                            <li key={key}>
+                                                <button
+                                                    onClick={() => handleSelectTheme(key)}
+                                                    className="w-full text-left flex items-center space-x-3 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                                >
+                                                    <div className="flex -space-x-1.5 border border-gray-300 rounded-full">
+                                                        <span className={`block w-4 h-4 rounded-l-full ${THEMES[key].bg}`}></span>
+                                                        <span className={`block w-4 h-4 rounded-r-full ${THEMES[key].header}`}></span>
+                                                    </div>
+                                                    <span>{name}</span>
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
                         </div>
                         <button onClick={onLogout} className="text-xs opacity-70 hover:underline">Sair</button>
                     </div>

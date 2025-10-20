@@ -21,7 +21,7 @@ const FriendsPage: React.FC<FriendsPageProps> = ({ friends, pendingRequests, onA
                     </h2>
                     <div className="space-y-3">
                         {pendingRequests.map(user => (
-                            <div key={user.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-600 rounded-md">
+                            <div key={user.id} className={`flex items-center justify-between p-2 ${theme.subtleBg} rounded-md`}>
                                 <div className="flex items-center space-x-3">
                                     <img src={user.profilePicUrl} alt={user.name} className="w-12 h-12 rounded-md" />
                                     <div>

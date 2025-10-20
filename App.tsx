@@ -1,3 +1,5 @@
+
+
 import React, { useState } from 'react';
 import Header from './components/Header';
 import ProfileSidebar from './components/ProfileSidebar';
@@ -8,11 +10,14 @@ import LoginPage from './components/LoginPage';
 import CommunitiesPage from './components/CommunitiesPage';
 import PhotosPage from './components/PhotosPage';
 import VideosPage from './components/VideosPage';
+import PostsPage from './components/PostsPage';
 import CommunityDetailPage from './components/CommunityDetailPage';
-import { MOCK_USERS, MOCK_SCRAPS, MOCK_TESTIMONIALS, MOCK_COMMUNITIES } from './constants';
-import type { User, Scrap, Testimonial, Community } from './types';
+import ChatSidebar from './components/ChatSidebar';
+import ChatWindow from './components/ChatWindow';
+import { MOCK_USERS, MOCK_SCRAPS, MOCK_TESTIMONIALS, MOCK_COMMUNITIES, MOCK_POSTS, MOCK_CHAT_MESSAGES } from './constants';
+import type { User, Scrap, Testimonial, Community, Post, PostComment, ChatMessage } from './types';
 
-type CurrentPage = 'profile' | 'friends' | 'editProfile' | 'communities' | 'photos' | 'videos' | 'communityDetail';
+type CurrentPage = 'profile' | 'friends' | 'editProfile' | 'communities' | 'photos' | 'videos' | 'posts' | 'communityDetail';
 
 export const THEMES: { [key: string]: { [key: string]: string } } = {
     classic: {
@@ -27,6 +32,9 @@ export const THEMES: { [key: string]: { [key: string]: string } } = {
         panelBg: 'bg-white',
         panelBorder: 'border-gray-300',
         footer: 'bg-[#ED008C]',
+        subtleBg: 'bg-gray-100',
+        subtleBgHover: 'hover:bg-gray-200',
+        inputBg: 'bg-white',
     },
     pink: {
         bg: 'bg-pink-50',
@@ -40,6 +48,9 @@ export const THEMES: { [key: string]: { [key: string]: string } } = {
         panelBg: 'bg-white',
         panelBorder: 'border-pink-200',
         footer: 'bg-pink-500',
+        subtleBg: 'bg-pink-100',
+        subtleBgHover: 'hover:bg-pink-200',
+        inputBg: 'bg-white',
     },
     dark: {
         bg: 'bg-gray-800',
@@ -53,6 +64,9 @@ export const THEMES: { [key: string]: { [key: string]: string } } = {
         panelBg: 'bg-gray-700',
         panelBorder: 'border-gray-600',
         footer: 'bg-gray-900',
+        subtleBg: 'bg-gray-600',
+        subtleBgHover: 'hover:bg-gray-500',
+        inputBg: 'bg-gray-600',
     },
     green: {
         bg: 'bg-green-50',
@@ -66,6 +80,9 @@ export const THEMES: { [key: string]: { [key: string]: string } } = {
         panelBg: 'bg-white',
         panelBorder: 'border-green-200',
         footer: 'bg-green-700',
+        subtleBg: 'bg-green-100',
+        subtleBgHover: 'hover:bg-green-200',
+        inputBg: 'bg-white',
     }
 };
 
@@ -76,6 +93,10 @@ const App: React.FC = () => {
     const [users, setUsers] = useState<{ [key: number]: User }>(MOCK_USERS);
     const [scraps, setScraps] = useState<Scrap[]>(MOCK_SCRAPS);
     const [testimonials, setTestimonials] = useState<Testimonial[]>(MOCK_TESTIMONIALS);
+    const [posts, setPosts] = useState<Post[]>(MOCK_POSTS);
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>(MOCK_CHAT_MESSAGES);
+    const [openChatWindows, setOpenChatWindows] = useState<number[]>([]);
+
 
     const [currentPage, setCurrentPage] = useState<CurrentPage>('profile');
     const [viewedUserId, setViewedUserId] = useState<number | null>(null);
@@ -93,7 +114,7 @@ const App: React.FC = () => {
         setViewedUserId(null);
     };
 
-    const handleCreateAccount = (newUser: Omit<User, 'id' | 'friends' | 'friendRequests' | 'sentRequests' | 'communities' | 'profilePicUrl' | 'avatarUrl' | 'blockedUserIds'>) => {
+    const handleCreateAccount = (newUser: Omit<User, 'id' | 'friends' | 'friendRequests' | 'sentRequests' | 'communities' | 'profilePicUrl' | 'avatarUrl' | 'bannerUrl' | 'blockedUserIds' | 'onlineStatus'>) => {
         const newId = Date.now();
         const picUrl = `https://i.pravatar.cc/150?u=${newId}`;
         const userWithId: User = {
@@ -101,6 +122,8 @@ const App: React.FC = () => {
             id: newId,
             profilePicUrl: picUrl,
             avatarUrl: picUrl,
+            bannerUrl: 'https://picsum.photos/id/1019/800/200',
+            onlineStatus: 'online',
             friends: [],
             friendRequests: [],
             sentRequests: [],
@@ -245,6 +268,14 @@ const App: React.FC = () => {
         handleViewProfile(currentUser.id);
     };
 
+    const handleThemeChange = (themeKey: string) => {
+        if (!currentUser) return;
+        setUsers(prevUsers => ({
+            ...prevUsers,
+            [currentUser.id]: { ...prevUsers[currentUser.id], theme: themeKey }
+        }));
+    };
+
     const handleToggleCommunityMembership = (communityId: number) => {
         if (!currentUser) return;
         setUsers(prev => {
@@ -294,6 +325,53 @@ const App: React.FC = () => {
             }));
         }
     };
+    
+    const handleAddPost = (content: string) => {
+        if (!currentUser) return;
+        const newPost: Post = {
+            id: Date.now(),
+            authorId: currentUser.id,
+            content,
+            timestamp: 'Agora',
+            likedByIds: [],
+            comments: [],
+        };
+        setPosts(prev => [newPost, ...prev]);
+    };
+
+    const handleTogglePostLike = (postId: number) => {
+        if (!currentUser) return;
+        const userId = currentUser.id;
+        setPosts(prev => prev.map(post => {
+            if (post.id === postId) {
+                const isLiked = post.likedByIds.includes(userId);
+                return {
+                    ...post,
+                    likedByIds: isLiked
+                        ? post.likedByIds.filter(id => id !== userId)
+                        : [...post.likedByIds, userId],
+                };
+            }
+            return post;
+        }));
+    };
+
+    const handleAddPostComment = (postId: number, content: string) => {
+        if (!currentUser) return;
+        const newComment: PostComment = {
+            id: Date.now(),
+            authorId: currentUser.id,
+            content,
+            timestamp: 'Agora',
+        };
+        setPosts(prev => prev.map(post => {
+            if (post.id === postId) {
+                return { ...post, comments: [...post.comments, newComment] };
+            }
+            return post;
+        }));
+    };
+
 
     const handleBlockUser = (userIdToBlock: number) => {
         if (!currentUser) return;
@@ -331,6 +409,52 @@ const App: React.FC = () => {
             return newUsers;
         });
     };
+    
+    const handleOpenChat = (userId: number) => {
+        setOpenChatWindows(prev => {
+            if (prev.includes(userId)) {
+                return [...prev.filter(id => id !== userId), userId]; // Move to end to bring to front
+            }
+            if (prev.length >= 3) {
+                 alert("Você só pode abrir 3 janelas de bate-papo por vez.");
+                 return prev;
+            }
+            return [...prev, userId];
+        });
+    };
+
+    const handleCloseChat = (userId: number) => {
+        setOpenChatWindows(prev => prev.filter(id => id !== userId));
+    };
+
+    const handleSendMessage = (recipientId: number, content: string) => {
+        if (!currentUser) return;
+        const newMessage: ChatMessage = {
+            id: Date.now(),
+            senderId: currentUser.id,
+            recipientId: recipientId,
+            content: content,
+            timestamp: new Date().toISOString(),
+            read: true,
+        };
+        setChatMessages(prev => [...prev, newMessage]);
+
+        // Simulate a reply from the bot
+        setTimeout(() => {
+            const replies = ["kkkk", "Nossa, sério?", "Que legal!", "Entendi.", "Depois a gente se fala melhor.", "hahaha, com certeza!", "Top!", "Tô ocupado agora, depois respondo.", "👍"];
+            const replyContent = replies[Math.floor(Math.random() * replies.length)];
+            const replyMessage: ChatMessage = {
+                id: Date.now() + 1,
+                senderId: recipientId,
+                recipientId: currentUser.id,
+                content: replyContent,
+                timestamp: new Date().toISOString(),
+                read: false,
+            };
+            setChatMessages(prev => [...prev, replyMessage]);
+        }, Math.random() * 2000 + 1000); // Reply between 1-3 seconds
+    };
+
 
     if (!currentUser || !loggedInUserId) {
         return <LoginPage onLogin={handleLogin} onCreateAccount={handleCreateAccount} existingUsers={Object.values(users)} />;
@@ -340,7 +464,7 @@ const App: React.FC = () => {
         return <div>Carregando perfil...</div>;
     }
 
-    const currentTheme = THEMES[viewedUser.theme] || THEMES.classic;
+    const currentTheme = THEMES[currentUser.theme] || THEMES.classic;
     const isBlocked = currentUser.blockedUserIds.includes(viewedUser.id) || viewedUser.blockedUserIds.includes(currentUser.id);
 
     const viewedUserCommunities = viewedUser?.communities.map(id => MOCK_COMMUNITIES[id]).filter(Boolean) || [];
@@ -348,11 +472,14 @@ const App: React.FC = () => {
     const pendingRequests = currentUser.friendRequests.map(id => users[id]).filter(Boolean);
     const viewedUserScraps = scraps.filter(s => s.recipientId === viewedUser.id);
     const viewedUserTestimonials = testimonials.filter(t => t.recipientId === viewedUser.id);
-    
-    const availableUsersForSearch = Object.values(users).filter(user => 
-        !currentUser.blockedUserIds.includes(user.id) &&
-        !user.blockedUserIds.includes(currentUser.id)
-    );
+    const postFeed = posts.filter(post => currentUser.friends.includes(post.authorId) || post.authorId === currentUser.id);
+
+    // Fix: Cast user to the User type to resolve errors where properties were being accessed on an 'unknown' type.
+    const availableUsersForSearch = Object.values(users).filter(user => {
+        const typedUser = user as User;
+        return !currentUser.blockedUserIds.includes(typedUser.id) &&
+            !typedUser.blockedUserIds.includes(currentUser.id);
+    });
 
     const renderPage = () => {
         if (currentPage === 'profile' && isBlocked && currentUser.id !== viewedUser.id) {
@@ -383,7 +510,18 @@ const App: React.FC = () => {
             case 'photos':
                 return <PhotosPage theme={currentTheme} />;
             case 'videos':
-                return <VideosPage theme={currentTheme} />;
+                return <VideosPage theme={currentTheme} currentUser={currentUser} />;
+            case 'posts':
+                return <PostsPage 
+                            posts={postFeed}
+                            users={users}
+                            currentUser={currentUser}
+                            onAddPost={handleAddPost}
+                            onToggleLike={handleTogglePostLike}
+                            onAddComment={handleAddPostComment}
+                            onViewProfile={handleViewProfile}
+                            theme={currentTheme} 
+                        />;
             case 'communityDetail':
                  if (!viewedCommunity) return <div>Comunidade não encontrada.</div>
                  return <CommunityDetailPage community={viewedCommunity} theme={currentTheme} />;
@@ -425,13 +563,53 @@ const App: React.FC = () => {
     
     return (
         <div className={`${currentTheme.bg} min-h-screen font-sans flex flex-col`}>
-            <Header currentUser={currentUser} onNavigate={handleNavigate} onViewProfile={handleViewProfile} pendingRequestsCount={currentUser.friendRequests.length} allUsers={availableUsersForSearch} onLogout={handleLogout} theme={currentTheme} />
+            <Header 
+                currentUser={currentUser} 
+                onNavigate={handleNavigate} 
+                onViewProfile={handleViewProfile} 
+                pendingRequestsCount={currentUser.friendRequests.length} 
+                allUsers={availableUsersForSearch} 
+                onLogout={handleLogout} 
+                onThemeChange={handleThemeChange}
+                theme={currentTheme} 
+            />
             <main className="container mx-auto px-4 py-4 flex-grow">
                 {renderPage()}
             </main>
             <footer className={`w-full ${currentTheme.footer} ${currentTheme.headerText} text-center py-2 text-xs shadow-inner mt-4`}>
                 <p>© {new Date().getFullYear()} OldKut by André Azevedo. All rights reserved.</p>
             </footer>
+
+            {/* Chat UI */}
+            <div className="fixed bottom-0 right-4 flex items-end space-x-4 z-50">
+                {openChatWindows.map((friendId, index) => {
+                    const friend = users[friendId];
+                    if (!friend) return null;
+                    const messages = chatMessages.filter(
+                        msg => (msg.senderId === currentUser.id && msg.recipientId === friendId) || (msg.senderId === friendId && msg.recipientId === currentUser.id)
+                    ).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+                    return (
+                        <ChatWindow
+                            key={friendId}
+                            currentUser={currentUser}
+                            friend={friend}
+                            messages={messages}
+                            onSendMessage={(content) => handleSendMessage(friendId, content)}
+                            onClose={() => handleCloseChat(friendId)}
+                            theme={currentTheme}
+                            zIndex={100 + index} // To stack windows correctly
+                        />
+                    );
+                })}
+            </div>
+            <ChatSidebar 
+                friends={friends}
+                chatMessages={chatMessages}
+                currentUser={currentUser}
+                onOpenChat={handleOpenChat}
+                theme={currentTheme}
+            />
         </div>
     );
 };

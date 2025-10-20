@@ -18,7 +18,7 @@ const CommunitiesPage: React.FC<CommunitiesPageProps> = ({ allCommunities, userC
                 {allCommunities.map(community => {
                     const isMember = userCommunities.includes(community.id);
                     return (
-                        <div key={community.id} className={`flex items-center justify-between p-3 ${theme.bg === 'bg-gray-800' ? 'bg-gray-700' : 'bg-gray-50'} rounded-md hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors duration-200`}>
+                        <div key={community.id} className={`flex items-center justify-between p-3 ${theme.subtleBg} rounded-md ${theme.subtleBgHover} transition-colors duration-200`}>
                             <div className="flex items-center space-x-4">
                                 <img src={community.imageUrl} alt={community.name} className="w-12 h-12 rounded-sm" />
                                 <div>

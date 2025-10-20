@@ -1,13 +1,13 @@
 // Fix: Create the ProfileSidebar component.
 import React from 'react';
 import type { User } from '../types';
-import { StarIcon, CameraIcon, VideoIcon, MessageIcon, UserIcon, GroupIcon } from './icons';
+import { StarIcon, CameraIcon, VideoIcon, MessageIcon, UserIcon, GroupIcon, NewspaperIcon } from './icons';
 
 interface FriendshipProps {
     currentUser: User;
     viewedUser: User;
     onSendFriendRequest: (recipientId: number) => void;
-    onNavigate: (page: 'profile' | 'friends' | 'editProfile' | 'communities' | 'photos' | 'videos') => void;
+    onNavigate: (page: 'profile' | 'friends' | 'editProfile' | 'communities' | 'photos' | 'videos' | 'posts') => void;
     onBlockUser: (userId: number) => void;
     onUnblockUser: (userId: number) => void;
     theme: { [key: string]: string };
@@ -55,7 +55,7 @@ interface ProfileSidebarProps {
     currentUser: User;
     viewedUser: User;
     onSendFriendRequest: (recipientId: number) => void;
-    onNavigate: (page: 'profile' | 'friends' | 'editProfile' | 'communities' | 'photos' | 'videos') => void;
+    onNavigate: (page: 'profile' | 'friends' | 'editProfile' | 'communities' | 'photos' | 'videos' | 'posts') => void;
     onViewProfile: (userId: number) => void;
     onBlockUser: (userId: number) => void;
     onUnblockUser: (userId: number) => void;
@@ -65,29 +65,34 @@ interface ProfileSidebarProps {
 const ProfileSidebar: React.FC<ProfileSidebarProps> = ({ currentUser, viewedUser, onSendFriendRequest, onNavigate, onViewProfile, onBlockUser, onUnblockUser, theme }) => {
     return (
         <aside className="w-64 flex-shrink-0">
-            <div className={`${theme.panelBg} p-3 rounded-md border ${theme.panelBorder} shadow-sm`}>
-                <img src={viewedUser.profilePicUrl} alt={viewedUser.name} className="w-full h-auto rounded-md" />
-                <h2 className={`text-lg font-bold ${theme.link} mt-2`}>{viewedUser.name}</h2>
-                <div className={`text-sm ${theme.subtleText} mt-2 space-y-1`}>
-                    <p>{viewedUser.relationship}, {viewedUser.occupation}</p>
-                    <p>{viewedUser.city}, {viewedUser.country}</p>
+            <div className={`${theme.panelBg} rounded-md border ${theme.panelBorder} shadow-sm overflow-hidden`}>
+                <div className="relative">
+                    <img src={viewedUser.bannerUrl} alt={`${viewedUser.name}'s banner`} className="w-full h-24 object-cover" />
+                    <img src={viewedUser.profilePicUrl} alt={viewedUser.name} className={`w-24 h-24 rounded-md absolute -bottom-12 left-1/2 -translate-x-1/2 border-4 ${theme.panelBorder}`} />
                 </div>
-                <div className={`mt-3 border-t ${theme.panelBorder} pt-3`}>
-                    <FriendshipStatus 
-                        currentUser={currentUser} 
-                        viewedUser={viewedUser} 
-                        onSendFriendRequest={onSendFriendRequest} 
-                        onNavigate={onNavigate} 
-                        onBlockUser={onBlockUser}
-                        onUnblockUser={onUnblockUser}
-                        theme={theme} 
-                    />
-                </div>
-                 {currentUser.id !== viewedUser.id && !currentUser.blockedUserIds.includes(viewedUser.id) && (
-                    <div className="text-center mt-2">
-                        <button onClick={() => onBlockUser(viewedUser.id)} className={`text-xs ${theme.subtleText} hover:underline`}>Bloquear usuário</button>
+                <div className="pt-14 p-3">
+                    <h2 className={`text-lg font-bold ${theme.link} mt-2 text-center`}>{viewedUser.name}</h2>
+                    <div className={`text-sm ${theme.subtleText} mt-2 space-y-1 text-center`}>
+                        <p>{viewedUser.relationship}, {viewedUser.occupation}</p>
+                        <p>{viewedUser.city}, {viewedUser.country}</p>
                     </div>
-                )}
+                    <div className={`mt-3 border-t ${theme.panelBorder} pt-3`}>
+                        <FriendshipStatus 
+                            currentUser={currentUser} 
+                            viewedUser={viewedUser} 
+                            onSendFriendRequest={onSendFriendRequest} 
+                            onNavigate={onNavigate} 
+                            onBlockUser={onBlockUser}
+                            onUnblockUser={onUnblockUser}
+                            theme={theme} 
+                        />
+                    </div>
+                     {currentUser.id !== viewedUser.id && !currentUser.blockedUserIds.includes(viewedUser.id) && (
+                        <div className="text-center mt-2">
+                            <button onClick={() => onBlockUser(viewedUser.id)} className={`text-xs ${theme.subtleText} hover:underline`}>Bloquear usuário</button>
+                        </div>
+                    )}
+                </div>
             </div>
 
             <div className={`${theme.panelBg} p-3 rounded-md border ${theme.panelBorder} shadow-sm mt-4`}>
@@ -95,6 +100,10 @@ const ProfileSidebar: React.FC<ProfileSidebarProps> = ({ currentUser, viewedUser
                     <li className="flex items-center space-x-2">
                         <UserIcon />
                         <button onClick={() => onViewProfile(currentUser.id)} className={`${theme.link} hover:underline`}>Meu Perfil</button>
+                    </li>
+                     <li className="flex items-center space-x-2">
+                        <NewspaperIcon />
+                        <button onClick={() => onNavigate('posts')} className={`${theme.link} hover:underline`}>Posts</button>
                     </li>
                     <li className="flex items-center space-x-2">
                         <MessageIcon />

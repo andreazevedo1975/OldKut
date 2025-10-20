@@ -3,7 +3,7 @@ import type { User } from '../types';
 
 interface LoginPageProps {
     onLogin: (userId: number) => void;
-    onCreateAccount: (newUser: Omit<User, 'id' | 'friends' | 'friendRequests' | 'sentRequests' | 'communities' | 'profilePicUrl' | 'avatarUrl' | 'blockedUserIds'>) => void;
+    onCreateAccount: (newUser: Omit<User, 'id' | 'friends' | 'friendRequests' | 'sentRequests' | 'communities' | 'profilePicUrl' | 'avatarUrl' | 'bannerUrl' | 'blockedUserIds'>) => void;
     existingUsers: User[];
 }
 
