@@ -220,8 +220,14 @@ const LoginPage: React.FC<LoginPageProps> = () => {
                                             <select value={customizationData.relationship} onChange={e => setCustomizationData(p => ({...p, relationship: e.target.value}))} className="w-full p-2 border border-gray-300 rounded-md bg-white">
                                                 <option>Solteiro(a)</option>
                                                 <option>Namorando</option>
+                                                <option>Noivo(a)</option>
                                                 <option>Casado(a)</option>
+                                                <option>Em um relacionamento aberto</option>
                                                 <option>Complicado(a)</option>
+                                                <option>Separado(a)</option>
+                                                <option>Divorciado(a)</option>
+                                                <option>Viúvo(a)</option>
+                                                <option>Prefiro não dizer</option>
                                             </select>
                                         </div>
                                     </div>

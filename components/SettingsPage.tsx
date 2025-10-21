@@ -206,8 +206,14 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onUpdateProfil
                     >
                         <option>Solteiro(a)</option>
                         <option>Namorando</option>
+                        <option>Noivo(a)</option>
                         <option>Casado(a)</option>
+                        <option>Em um relacionamento aberto</option>
                         <option>Complicado(a)</option>
+                        <option>Separado(a)</option>
+                        <option>Divorciado(a)</option>
+                        <option>Viúvo(a)</option>
+                        <option>Prefiro não dizer</option>
                     </select>
                 </FormRow>
                 <FormRow label="Ocupação">

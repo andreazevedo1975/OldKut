@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 import Header from './components/Header';
@@ -13,6 +14,8 @@ import PostsPage from './components/PostsPage';
 import CommunityDetailPage from './components/CommunityDetailPage';
 import ChatSidebar from './components/ChatSidebar';
 import ChatWindow from './components/ChatWindow';
+import Chatbot from './components/Chatbot';
+import { SparklesIcon } from './components/icons';
 import type { User, Scrap, Testimonial, Community, Post, PostComment, ChatMessage, ProfileVisit } from './types';
 import type { Session } from '@supabase/supabase-js';
 
@@ -107,6 +110,7 @@ const App: React.FC = () => {
     const [viewedUserId, setViewedUserId] = useState<string | null>(null);
     const [viewedCommunityId, setViewedCommunityId] = useState<number | null>(null);
     const [initialProfileTab, setInitialProfileTab] = useState<ActiveTab | null>(null);
+    const [isChatbotOpen, setIsChatbotOpen] = useState(false);
 
     // Session management
     useEffect(() => {
@@ -506,6 +510,23 @@ const App: React.FC = () => {
                     );
                 })}
             </div>
+            
+            <div className="fixed bottom-4 right-4 z-[101]">
+                <button
+                    onClick={() => setIsChatbotOpen(prev => !prev)}
+                    className={`p-3 rounded-full shadow-lg transition-transform hover:scale-110 ${currentTheme.button} ${currentTheme.buttonText}`}
+                    aria-label="Abrir assistente"
+                >
+                    <SparklesIcon className="w-6 h-6" />
+                </button>
+            </div>
+            {isChatbotOpen && (
+                <Chatbot 
+                    currentUser={currentUser}
+                    onClose={() => setIsChatbotOpen(false)}
+                    theme={currentTheme}
+                />
+            )}
         </div>
     );
 };
