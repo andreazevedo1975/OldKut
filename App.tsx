@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import Header from './components/Header';
 import ProfileSidebar from './components/ProfileSidebar';
@@ -16,8 +16,8 @@ import ChatSidebar from './components/ChatSidebar';
 import ChatWindow from './components/ChatWindow';
 import Chatbot from './components/Chatbot';
 import { SparklesIcon } from './components/icons';
-import type { User, Scrap, Testimonial, Community, Post, PostComment, ChatMessage, ProfileVisit } from './types';
-import type { Session } from '@supabase/supabase-js';
+import type { User, Scrap, Testimonial, Community, Post, PostComment, ChatMessage, ProfileVisit, Notification } from './types';
+import type { Session, RealtimeChannel } from '@supabase/supabase-js';
 
 
 export type CurrentPage = 'profile' | 'friends' | 'settings' | 'communities' | 'photos' | 'videos' | 'posts' | 'communityDetail';
@@ -105,12 +105,21 @@ const App: React.FC = () => {
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [openChatWindows, setOpenChatWindows] = useState<string[]>([]);
     const [profileVisits, setProfileVisits] = useState<ProfileVisit[]>([]);
+    const [notifications, setNotifications] = useState<Notification[]>([]);
 
     const [currentPage, setCurrentPage] = useState<CurrentPage>('profile');
     const [viewedUserId, setViewedUserId] = useState<string | null>(null);
     const [viewedCommunityId, setViewedCommunityId] = useState<number | null>(null);
     const [initialProfileTab, setInitialProfileTab] = useState<ActiveTab | null>(null);
     const [isChatbotOpen, setIsChatbotOpen] = useState(false);
+
+    // State for post pagination
+    const [postsPage, setPostsPage] = useState(0);
+    const [hasMorePosts, setHasMorePosts] = useState(true);
+    const [isFetchingPosts, setIsFetchingPosts] = useState(false);
+    const POSTS_PER_PAGE = 5;
+
+    const notificationsChannel = useRef<RealtimeChannel | null>(null);
 
     // Session management
     useEffect(() => {
@@ -159,18 +168,30 @@ const App: React.FC = () => {
     }, [session, viewedUserId, fetchUserProfile]);
 
 
-    // Fetch posts for the user's feed
+    // Fetch initial posts for the user's feed
     useEffect(() => {
         if (session) {
-            const fetchPosts = async () => {
-                const { data, error } = await supabase.rpc('get_post_feed', { user_id_param: session.user.id });
+            const fetchInitialPosts = async () => {
+                setIsFetchingPosts(true);
+                setPosts([]);
+                setPostsPage(0);
+                setHasMorePosts(true);
+                
+                const { data, error } = await supabase.rpc('get_post_feed', { 
+                    user_id_param: session.user.id,
+                    limit_param: POSTS_PER_PAGE,
+                    offset_param: 0 
+                });
+
                 if (error) {
-                    console.error('Error fetching post feed:', error);
-                } else {
-                    setPosts(data || []);
-                    // Pre-fetch profiles for authors and commenters
+                    console.error('Error fetching initial post feed:', error);
+                } else if (data) {
+                    setPosts(data);
+                    if (data.length < POSTS_PER_PAGE) {
+                        setHasMorePosts(false);
+                    }
                     const userIdsToFetch = new Set<string>();
-                    (data || []).forEach((post: Post) => {
+                    data.forEach((post: Post) => {
                         if (!users[post.authorId]) userIdsToFetch.add(post.authorId);
                         post.comments.forEach(comment => {
                             if (!users[comment.authorId]) userIdsToFetch.add(comment.authorId);
@@ -178,10 +199,97 @@ const App: React.FC = () => {
                     });
                     userIdsToFetch.forEach(fetchUserProfile);
                 }
+                setIsFetchingPosts(false);
             };
-            fetchPosts();
+            fetchInitialPosts();
         }
-    }, [session, users, fetchUserProfile]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [session]);
+
+    // Fetch and subscribe to notifications
+    useEffect(() => {
+        if (session?.user?.id) {
+            const fetchInitialNotifications = async () => {
+                const { data, error } = await supabase
+                    .from('notifications')
+                    .select('*')
+                    .eq('recipient_id', session.user.id)
+                    .order('created_at', { ascending: false })
+                    .limit(30);
+
+                if (error) {
+                    console.error('Error fetching notifications:', error);
+                } else if (data) {
+                    const formattedData: Notification[] = data.map(n => ({...n, actorId: n.actor_id, recipientId: n.recipient_id, targetId: n.target_id, timestamp: n.created_at}));
+                    setNotifications(formattedData);
+                    const actorIds = new Set(data.map(n => n.actor_id));
+                    actorIds.forEach(id => {
+                        if (!users[id]) fetchUserProfile(id);
+                    });
+                }
+            };
+
+            fetchInitialNotifications();
+
+            if (notificationsChannel.current) {
+                notificationsChannel.current.unsubscribe();
+            }
+            
+            const channel = supabase.channel(`notifications:${session.user.id}`)
+                .on<Notification>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `recipient_id=eq.${session.user.id}` },
+                (payload) => {
+                    const newNotification: Notification = {...payload.new, actorId: payload.new.actor_id, recipientId: payload.new.recipient_id, targetId: payload.new.target_id, timestamp: payload.new.created_at};
+                    setNotifications(prev => [newNotification, ...prev]);
+                    if (!users[newNotification.actorId]) {
+                        fetchUserProfile(newNotification.actorId);
+                    }
+                })
+                .subscribe();
+
+            notificationsChannel.current = channel;
+
+            return () => {
+                if (notificationsChannel.current) {
+                    supabase.removeChannel(notificationsChannel.current);
+                }
+            };
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [session?.user?.id]);
+
+
+    const handleLoadMorePosts = async () => {
+        if (isFetchingPosts || !hasMorePosts || !session) return;
+    
+        const nextPageToFetch = postsPage + 1;
+        setIsFetchingPosts(true);
+    
+        const { data, error } = await supabase.rpc('get_post_feed', { 
+            user_id_param: session.user.id, 
+            limit_param: POSTS_PER_PAGE, 
+            offset_param: nextPageToFetch * POSTS_PER_PAGE 
+        });
+    
+        if (error) {
+            console.error("Error fetching more posts:", error);
+        } else if (data) {
+            setPosts(prevPosts => [...prevPosts, ...data]);
+            setPostsPage(nextPageToFetch);
+            if (data.length < POSTS_PER_PAGE) {
+                setHasMorePosts(false);
+            }
+            const userIdsToFetch = new Set<string>();
+            data.forEach((post: Post) => {
+                if (!users[post.authorId]) userIdsToFetch.add(post.authorId);
+                post.comments.forEach(comment => {
+                    if (!users[comment.authorId]) userIdsToFetch.add(comment.authorId);
+                });
+            });
+            userIdsToFetch.forEach(fetchUserProfile);
+        }
+    
+        setIsFetchingPosts(false);
+    };
 
 
     const handleLogout = async () => {
@@ -350,6 +458,38 @@ const App: React.FC = () => {
             setChatMessages(prev => [...prev, newMessage]);
         }
     };
+    
+    const handleMarkNotificationAsRead = async (notificationId: number, callback?: () => void) => {
+        const notification = notifications.find(n => n.id === notificationId);
+        // Only update if it's currently unread
+        if (notification && !notification.read) {
+            // Optimistic update
+            setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, read: true } : n));
+            const { error } = await supabase.from('notifications').update({ read: true }).eq('id', notificationId);
+            if (error) {
+                console.error('Error marking notification as read:', error);
+                // Revert on error if desired
+                setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, read: false } : n));
+            }
+        }
+        // Execute callback regardless of read status
+        callback?.();
+    };
+
+    const handleMarkAllNotificationsAsRead = async () => {
+        const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
+        if (unreadIds.length === 0) return;
+
+        // Optimistic update
+        setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+        
+        const { error } = await supabase.from('notifications').update({ read: true }).in('id', unreadIds);
+        if (error) {
+            console.error('Error marking all notifications as read:', error);
+            // Revert on error if desired
+            setNotifications(prev => prev.map(n => unreadIds.includes(n.id) ? { ...n, read: false } : n));
+        }
+    };
 
 
     if (loading) {
@@ -418,6 +558,9 @@ const App: React.FC = () => {
                         onAddComment={handleAddComment}
                         onViewProfile={handleViewProfile}
                         theme={currentTheme}
+                        onLoadMore={handleLoadMorePosts}
+                        hasMorePosts={hasMorePosts}
+                        isFetchingPosts={isFetchingPosts}
                     />
                 );
              case 'photos':
@@ -460,10 +603,13 @@ const App: React.FC = () => {
                 currentUser={currentUser} 
                 onNavigate={handleNavigate} 
                 onViewProfile={handleViewProfile} 
-                pendingRequestsCount={pendingRequests.length} 
                 allUsers={availableUsersForSearch} 
                 onLogout={handleLogout} 
                 theme={currentTheme} 
+                notifications={notifications}
+                users={users}
+                onMarkAsRead={handleMarkNotificationAsRead}
+                onMarkAllAsRead={handleMarkAllNotificationsAsRead}
             />
             <main className="container mx-auto px-4 py-4 flex-grow flex space-x-4">
                 <ProfileSidebar

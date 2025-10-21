@@ -77,3 +77,13 @@ export interface ProfileVisit {
   visitedId: string;
   timestamp: string; // ISO String
 }
+
+export interface Notification {
+  id: number;
+  recipientId: string;
+  actorId: string;
+  type: 'friend_request' | 'new_like' | 'new_comment';
+  targetId?: number; // e.g., post_id
+  read: boolean;
+  timestamp: string;
+}

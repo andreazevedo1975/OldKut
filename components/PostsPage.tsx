@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import type { Post, User, PostComment } from '../types';
 import { HeartIcon, MessageIcon } from './icons';
@@ -11,6 +12,9 @@ interface PostsPageProps {
     onAddComment: (postId: number, content: string) => void;
     onViewProfile: (userId: string) => void;
     theme: { [key: string]: string };
+    onLoadMore: () => void;
+    hasMorePosts: boolean;
+    isFetchingPosts: boolean;
 }
 
 const PostCreator: React.FC<{
@@ -153,10 +157,17 @@ const PostCard: React.FC<{
 };
 
 
-const PostsPage: React.FC<PostsPageProps> = ({ posts, users, currentUser, onAddPost, onToggleLike, onAddComment, onViewProfile, theme }) => {
+const PostsPage: React.FC<PostsPageProps> = ({ posts, users, currentUser, onAddPost, onToggleLike, onAddComment, onViewProfile, theme, onLoadMore, hasMorePosts, isFetchingPosts }) => {
     return (
         <div className="max-w-2xl mx-auto">
             <PostCreator currentUser={currentUser} onAddPost={onAddPost} theme={theme} />
+
+            {isFetchingPosts && posts.length === 0 && (
+                <div className={`${theme.panelBg} p-6 rounded-md border ${theme.panelBorder} shadow-sm text-center`}>
+                    <p className={`${theme.subtleText}`}>Carregando posts...</p>
+                </div>
+            )}
+
             <div className="space-y-4">
                 {posts.map(post => (
                     <PostCard
@@ -170,13 +181,30 @@ const PostsPage: React.FC<PostsPageProps> = ({ posts, users, currentUser, onAddP
                         theme={theme}
                     />
                 ))}
-                 {posts.length === 0 && (
-                    <div className={`${theme.panelBg} p-6 rounded-md border ${theme.panelBorder} shadow-sm text-center`}>
-                        <p className={`${theme.subtleText}`}>Seu feed de posts está vazio.</p>
-                        <p className={`${theme.subtleText} mt-1 text-sm`}>Adicione amigos para ver o que eles estão postando!</p>
-                    </div>
-                )}
             </div>
+
+            {posts.length === 0 && !isFetchingPosts && (
+                <div className={`${theme.panelBg} p-6 rounded-md border ${theme.panelBorder} shadow-sm text-center`}>
+                    <p className={`${theme.subtleText}`}>Seu feed de posts está vazio.</p>
+                    <p className={`${theme.subtleText} mt-1 text-sm`}>Adicione amigos para ver o que eles estão postando!</p>
+                </div>
+            )}
+
+            {posts.length > 0 && (
+                <div className="mt-6 text-center">
+                    {hasMorePosts ? (
+                        <button
+                            onClick={onLoadMore}
+                            disabled={isFetchingPosts}
+                            className={`${theme.button} ${theme.buttonText} font-bold py-2 px-6 rounded-md hover:opacity-90 disabled:bg-gray-400 disabled:cursor-wait`}
+                        >
+                            {isFetchingPosts ? 'Carregando...' : 'Carregar mais posts'}
+                        </button>
+                    ) : (
+                        <p className={`${theme.subtleText} text-sm`}>Fim do feed. Você viu tudo!</p>
+                    )}
+                </div>
+            )}
         </div>
     );
 };
