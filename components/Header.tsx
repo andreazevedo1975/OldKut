@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import type { User, Notification } from '../types';
 import type { CurrentPage } from '../App';
@@ -207,7 +206,7 @@ const Header: React.FC<HeaderProps> = ({ currentUser, onNavigate, onViewProfile,
                             >
                                 <BellIcon className="w-6 h-6" />
                                 {unreadCount > 0 && (
-                                    <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center border-2 border-pink-500">
+                                    <span className={`absolute -top-1 -right-2 bg-red-600 text-white text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center border-2 ${theme.header}`}>
                                         {unreadCount}
                                     </span>
                                 )}
