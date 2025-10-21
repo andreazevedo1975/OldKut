@@ -1,11 +1,10 @@
-
-
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { supabase } from './supabaseClient';
 import Header from './components/Header';
 import ProfileSidebar from './components/ProfileSidebar';
 import MainContent from './components/MainContent';
 import FriendsPage from './components/FriendsPage';
-import EditProfilePage from './components/EditProfilePage';
+import SettingsPage from './components/SettingsPage';
 import LoginPage from './components/LoginPage';
 import CommunitiesPage from './components/CommunitiesPage';
 import PhotosPage from './components/PhotosPage';
@@ -14,10 +13,13 @@ import PostsPage from './components/PostsPage';
 import CommunityDetailPage from './components/CommunityDetailPage';
 import ChatSidebar from './components/ChatSidebar';
 import ChatWindow from './components/ChatWindow';
-import { MOCK_USERS, MOCK_SCRAPS, MOCK_TESTIMONIALS, MOCK_COMMUNITIES, MOCK_POSTS, MOCK_CHAT_MESSAGES } from './constants';
-import type { User, Scrap, Testimonial, Community, Post, PostComment, ChatMessage } from './types';
+import type { User, Scrap, Testimonial, Community, Post, PostComment, ChatMessage, ProfileVisit } from './types';
+import type { Session } from '@supabase/supabase-js';
 
-type CurrentPage = 'profile' | 'friends' | 'editProfile' | 'communities' | 'photos' | 'videos' | 'posts' | 'communityDetail';
+
+export type CurrentPage = 'profile' | 'friends' | 'settings' | 'communities' | 'photos' | 'videos' | 'posts' | 'communityDetail';
+export type ActiveTab = 'scraps' | 'testimonials';
+
 
 export const THEMES: { [key: string]: { [key: string]: string } } = {
     classic: {
@@ -88,55 +90,104 @@ export const THEMES: { [key: string]: { [key: string]: string } } = {
 
 
 const App: React.FC = () => {
-    const [loggedInUserId, setLoggedInUserId] = useState<number | null>(null);
+    const [session, setSession] = useState<Session | null>(null);
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [loading, setLoading] = useState(true);
 
-    const [users, setUsers] = useState<{ [key: number]: User }>(MOCK_USERS);
-    const [scraps, setScraps] = useState<Scrap[]>(MOCK_SCRAPS);
-    const [testimonials, setTestimonials] = useState<Testimonial[]>(MOCK_TESTIMONIALS);
-    const [posts, setPosts] = useState<Post[]>(MOCK_POSTS);
-    const [chatMessages, setChatMessages] = useState<ChatMessage[]>(MOCK_CHAT_MESSAGES);
-    const [openChatWindows, setOpenChatWindows] = useState<number[]>([]);
-
+    const [users, setUsers] = useState<{ [key: string]: User }>({});
+    const [scraps, setScraps] = useState<Scrap[]>([]);
+    const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
+    const [communities, setCommunities] = useState<{ [key: number]: Community }>({});
+    const [posts, setPosts] = useState<Post[]>([]);
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+    const [openChatWindows, setOpenChatWindows] = useState<string[]>([]);
+    const [profileVisits, setProfileVisits] = useState<ProfileVisit[]>([]);
 
     const [currentPage, setCurrentPage] = useState<CurrentPage>('profile');
-    const [viewedUserId, setViewedUserId] = useState<number | null>(null);
+    const [viewedUserId, setViewedUserId] = useState<string | null>(null);
     const [viewedCommunityId, setViewedCommunityId] = useState<number | null>(null);
+    const [initialProfileTab, setInitialProfileTab] = useState<ActiveTab | null>(null);
+
+    // Session management
+    useEffect(() => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            setSession(session);
+            setLoading(false);
+        });
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setSession(session);
+        });
+
+        return () => subscription.unsubscribe();
+    }, []);
+
+    const fetchUserProfile = useCallback(async (userId: string): Promise<User | null> => {
+        // Return cached user if available
+        if (users[userId]) {
+            return users[userId];
+        }
+        
+        const { data, error } = await supabase.rpc('get_user_profile', { user_id_param: userId });
+        if (error) {
+            console.error('Error fetching user profile:', error);
+            return null;
+        }
+        if (data) {
+            setUsers(prev => ({...prev, [data.id]: data }));
+            return data;
+        }
+        return null;
+    }, [users]);
+
+    // Fetch current user's profile and core data
+    useEffect(() => {
+        if (session) {
+            fetchUserProfile(session.user.id).then(user => {
+                if (user) {
+                    setCurrentUser(user);
+                    if (!viewedUserId) {
+                        setViewedUserId(user.id);
+                    }
+                }
+            });
+        }
+    }, [session, viewedUserId, fetchUserProfile]);
 
 
-    const handleLogin = (userId: number) => {
-        setLoggedInUserId(userId);
-        setViewedUserId(userId);
-        setCurrentPage('profile');
-    };
+    // Fetch posts for the user's feed
+    useEffect(() => {
+        if (session) {
+            const fetchPosts = async () => {
+                const { data, error } = await supabase.rpc('get_post_feed', { user_id_param: session.user.id });
+                if (error) {
+                    console.error('Error fetching post feed:', error);
+                } else {
+                    setPosts(data || []);
+                    // Pre-fetch profiles for authors and commenters
+                    const userIdsToFetch = new Set<string>();
+                    (data || []).forEach((post: Post) => {
+                        if (!users[post.authorId]) userIdsToFetch.add(post.authorId);
+                        post.comments.forEach(comment => {
+                            if (!users[comment.authorId]) userIdsToFetch.add(comment.authorId);
+                        });
+                    });
+                    userIdsToFetch.forEach(fetchUserProfile);
+                }
+            };
+            fetchPosts();
+        }
+    }, [session, users, fetchUserProfile]);
 
-    const handleLogout = () => {
-        setLoggedInUserId(null);
+
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
+        setCurrentUser(null);
         setViewedUserId(null);
     };
-
-    const handleCreateAccount = (newUser: Omit<User, 'id' | 'friends' | 'friendRequests' | 'sentRequests' | 'communities' | 'profilePicUrl' | 'avatarUrl' | 'bannerUrl' | 'blockedUserIds' | 'onlineStatus'>) => {
-        const newId = Date.now();
-        const picUrl = `https://i.pravatar.cc/150?u=${newId}`;
-        const userWithId: User = {
-            ...newUser,
-            id: newId,
-            profilePicUrl: picUrl,
-            avatarUrl: picUrl,
-            bannerUrl: 'https://picsum.photos/id/1019/800/200',
-            onlineStatus: 'online',
-            friends: [],
-            friendRequests: [],
-            sentRequests: [],
-            communities: [],
-            blockedUserIds: [],
-        };
-        setUsers(prev => ({...prev, [newId]: userWithId}));
-        handleLogin(newId);
-    };
     
-    const currentUser = loggedInUserId ? users[loggedInUserId] : null;
     const viewedUser = viewedUserId ? users[viewedUserId] : null;
-    const viewedCommunity = viewedCommunityId ? MOCK_COMMUNITIES[viewedCommunityId] : null;
+    const viewedCommunity = viewedCommunityId ? communities[viewedCommunityId] : null;
 
     const handleNavigate = (page: CurrentPage) => {
         if (page === 'profile' && currentUser) {
@@ -145,9 +196,17 @@ const App: React.FC = () => {
         setCurrentPage(page);
     };
 
-    const handleViewProfile = (userId: number) => {
+    const handleViewProfile = async (userId: string, options?: { initialTab?: ActiveTab }) => {
+        if (!users[userId]) {
+            await fetchUserProfile(userId);
+        }
         setViewedUserId(userId);
         setCurrentPage('profile');
+        setInitialProfileTab(options?.initialTab || null);
+        
+        if (currentUser && currentUser.id !== userId) {
+            await supabase.from('profile_visits').insert({ visitor_id: currentUser.id, visited_id: userId });
+        }
     };
     
     const handleViewCommunity = (communityId: number) => {
@@ -155,409 +214,239 @@ const App: React.FC = () => {
         setCurrentPage('communityDetail');
     };
 
+    const handleAddPost = async (content: string) => {
+        if (!currentUser) return;
 
-    const handleSendFriendRequest = (recipientId: number) => {
-       if (!currentUser || currentUser.blockedUserIds.includes(recipientId) || users[recipientId].blockedUserIds.includes(currentUser.id)) return;
-        setUsers(prevUsers => {
-            const newUsers = { ...prevUsers };
-            const sender = newUsers[currentUser.id];
-            
-            if (sender.friends.includes(recipientId) || sender.sentRequests.includes(recipientId) || sender.friendRequests.includes(recipientId)) {
-                return prevUsers; 
-            }
-
-            newUsers[currentUser.id] = {
-                ...sender,
-                sentRequests: [...sender.sentRequests, recipientId]
-            };
-            newUsers[recipientId] = {
-                ...newUsers[recipientId],
-                friendRequests: [...newUsers[recipientId].friendRequests, currentUser.id]
-            };
-            return newUsers;
-        });
-    };
+        // The RPC function 'create_post_and_get' will handle insertion and return the formatted post
+        const { data, error } = await supabase.rpc('create_post_and_get', { p_author_id: currentUser.id, p_content: content });
     
-    const handleAcceptRequest = (requesterId: number) => {
-        if (!currentUser) return;
-         setUsers(prevUsers => {
-            const newUsers = { ...prevUsers };
-            const currentUserId = currentUser.id;
-
-            newUsers[currentUserId] = {
-                ...newUsers[currentUserId],
-                friendRequests: newUsers[currentUserId].friendRequests.filter(id => id !== requesterId),
-                friends: [...newUsers[currentUserId].friends, requesterId]
-            };
-
-            newUsers[requesterId] = {
-                ...newUsers[requesterId],
-                sentRequests: newUsers[requesterId].sentRequests.filter(id => id !== currentUserId),
-                friends: [...newUsers[requesterId].friends, currentUserId]
-            };
-            
-            return newUsers;
-        });
-    };
-
-    const handleRejectRequest = (requesterId: number) => {
-        if (!currentUser) return;
-         setUsers(prevUsers => {
-            const newUsers = { ...prevUsers };
-            const currentUserId = currentUser.id;
-
-            newUsers[currentUserId] = {
-                ...newUsers[currentUserId],
-                friendRequests: newUsers[currentUserId].friendRequests.filter(id => id !== requesterId)
-            };
-            newUsers[requesterId] = {
-                ...newUsers[requesterId],
-                sentRequests: newUsers[requesterId].sentRequests.filter(id => id !== currentUserId)
-            };
-            return newUsers;
-        });
-    };
-
-    const handleAddScrap = (content: string, recipientId: number) => {
-        if (!currentUser || currentUser.blockedUserIds.includes(recipientId) || users[recipientId].blockedUserIds.includes(currentUser.id)) {
-            alert("Você não pode enviar recados para este usuário.");
-            return;
-        };
-        const newScrap: Scrap = {
-            id: Date.now(),
-            authorId: currentUser.id,
-            recipientId,
-            content,
-            timestamp: 'Agora',
-            orkutedByIds: [],
-        };
-        setScraps(prevScraps => [newScrap, ...prevScraps]);
-    };
-
-    const handleAddTestimonial = (content: string, recipientId: number) => {
-        if (!currentUser || currentUser.blockedUserIds.includes(recipientId) || users[recipientId].blockedUserIds.includes(currentUser.id)) {
-             alert("Você não pode enviar depoimentos para este usuário.");
-            return;
-        }
-        const newTestimonial: Testimonial = {
-            id: Date.now(),
-            authorId: currentUser.id,
-            recipientId,
-            content,
-            approved: false,
-            orkutedByIds: [],
-        };
-        setTestimonials(prev => [...prev, newTestimonial]);
-        alert('Depoimento enviado para aprovação!');
-    };
-
-    const handleApproveTestimonial = (testimonialId: number) => {
-        setTestimonials(prev => prev.map(t => t.id === testimonialId ? { ...t, approved: true } : t));
-    };
-
-    const handleRejectTestimonial = (testimonialId: number) => {
-        setTestimonials(prev => prev.filter(t => t.id !== testimonialId));
-    };
-    
-    const handleUpdateProfile = (updatedData: Partial<User>) => {
-        if (!currentUser) return;
-        setUsers(prevUsers => ({
-            ...prevUsers,
-            [currentUser.id]: { ...prevUsers[currentUser.id], ...updatedData }
-        }));
-        handleViewProfile(currentUser.id);
-    };
-
-    const handleThemeChange = (themeKey: string) => {
-        if (!currentUser) return;
-        setUsers(prevUsers => ({
-            ...prevUsers,
-            [currentUser.id]: { ...prevUsers[currentUser.id], theme: themeKey }
-        }));
-    };
-
-    const handleToggleCommunityMembership = (communityId: number) => {
-        if (!currentUser) return;
-        setUsers(prev => {
-            const newUsers = { ...prev };
-            const user = newUsers[currentUser.id];
-            const isMember = user.communities.includes(communityId);
-            
-            newUsers[currentUser.id] = {
-                ...user,
-                communities: isMember 
-                    ? user.communities.filter(id => id !== communityId)
-                    : [...user.communities, communityId]
-            };
-            return newUsers;
-        });
-    };
-
-    const handleToggleOrkutear = (itemId: number, itemType: 'scrap' | 'testimonial') => {
-        if (!currentUser) return;
-        const userId = currentUser.id;
-
-        if (itemType === 'scrap') {
-            setScraps(prev => prev.map(scrap => {
-                if (scrap.id === itemId) {
-                    const isOrkuted = scrap.orkutedByIds.includes(userId);
-                    return {
-                        ...scrap,
-                        orkutedByIds: isOrkuted
-                            ? scrap.orkutedByIds.filter(id => id !== userId)
-                            : [...scrap.orkutedByIds, userId]
-                    };
-                }
-                return scrap;
-            }));
-        } else { // testimonial
-            setTestimonials(prev => prev.map(testimonial => {
-                if (testimonial.id === itemId) {
-                    const isOrkuted = testimonial.orkutedByIds.includes(userId);
-                    return {
-                        ...testimonial,
-                        orkutedByIds: isOrkuted
-                            ? testimonial.orkutedByIds.filter(id => id !== userId)
-                            : [...testimonial.orkutedByIds, userId]
-                    };
-                }
-                return testimonial;
-            }));
+        if (error) {
+            console.error("Error creating post:", error);
+            alert("Não foi possível criar o post. Tente novamente.");
+        } else if (data && data.length > 0) {
+            setPosts(prevPosts => [data[0], ...prevPosts]);
         }
     };
     
-    const handleAddPost = (content: string) => {
+    const handleToggleLike = async (postId: number) => {
         if (!currentUser) return;
-        const newPost: Post = {
-            id: Date.now(),
-            authorId: currentUser.id,
-            content,
-            timestamp: 'Agora',
-            likedByIds: [],
-            comments: [],
-        };
-        setPosts(prev => [newPost, ...prev]);
-    };
-
-    const handleTogglePostLike = (postId: number) => {
-        if (!currentUser) return;
-        const userId = currentUser.id;
-        setPosts(prev => prev.map(post => {
-            if (post.id === postId) {
-                const isLiked = post.likedByIds.includes(userId);
-                return {
-                    ...post,
-                    likedByIds: isLiked
-                        ? post.likedByIds.filter(id => id !== userId)
-                        : [...post.likedByIds, userId],
-                };
-            }
-            return post;
-        }));
-    };
-
-    const handleAddPostComment = (postId: number, content: string) => {
-        if (!currentUser) return;
-        const newComment: PostComment = {
-            id: Date.now(),
-            authorId: currentUser.id,
-            content,
-            timestamp: 'Agora',
-        };
-        setPosts(prev => prev.map(post => {
-            if (post.id === postId) {
-                return { ...post, comments: [...post.comments, newComment] };
-            }
-            return post;
-        }));
-    };
-
-
-    const handleBlockUser = (userIdToBlock: number) => {
-        if (!currentUser) return;
-        const currentUserId = currentUser.id;
-
-        setUsers(prev => {
-            const newUsers = { ...prev };
-            // Add to blocker's list
-            newUsers[currentUserId] = {
-                ...newUsers[currentUserId],
-                blockedUserIds: [...newUsers[currentUserId].blockedUserIds, userIdToBlock],
-                friends: newUsers[currentUserId].friends.filter(id => id !== userIdToBlock),
-                friendRequests: newUsers[currentUserId].friendRequests.filter(id => id !== userIdToBlock),
-                sentRequests: newUsers[currentUserId].sentRequests.filter(id => id !== userIdToBlock),
-            };
-            // Remove from blocked user's lists
-            newUsers[userIdToBlock] = {
-                ...newUsers[userIdToBlock],
-                friends: newUsers[userIdToBlock].friends.filter(id => id !== currentUserId),
-                friendRequests: newUsers[userIdToBlock].friendRequests.filter(id => id !== currentUserId),
-                sentRequests: newUsers[userIdToBlock].sentRequests.filter(id => id !== currentUserId),
-            };
-            return newUsers;
+    
+        const originalPosts = posts.map(p => ({...p, likedByIds: [...p.likedByIds]}));
+        const postIndex = posts.findIndex(p => p.id === postId);
+        if (postIndex === -1) return;
+    
+        const postToUpdate = { ...posts[postIndex] };
+        const isLiked = postToUpdate.likedByIds.includes(currentUser.id);
+        
+        if (isLiked) {
+            postToUpdate.likedByIds = postToUpdate.likedByIds.filter(id => id !== currentUser.id);
+        } else {
+            postToUpdate.likedByIds.push(currentUser.id);
+        }
+        
+        const updatedPosts = [...posts];
+        updatedPosts[postIndex] = postToUpdate;
+        setPosts(updatedPosts); // Optimistic update
+    
+        const { error } = await supabase.rpc('toggle_like', { 
+            post_id_param: postId, 
+            user_id_param: currentUser.id 
         });
+    
+        if (error) {
+            console.error("Error toggling like:", error);
+            setPosts(originalPosts); // Revert on error
+            alert("Não foi possível curtir o post. Tente novamente.");
+        }
     };
     
-    const handleUnblockUser = (userIdToUnblock: number) => {
+    const handleAddComment = async (postId: number, content: string) => {
         if (!currentUser) return;
-        setUsers(prev => {
-            const newUsers = { ...prev };
-            newUsers[currentUser.id] = {
-                ...newUsers[currentUser.id],
-                blockedUserIds: newUsers[currentUser.id].blockedUserIds.filter(id => id !== userIdToUnblock),
-            };
-            return newUsers;
-        });
-    };
     
-    const handleOpenChat = (userId: number) => {
-        setOpenChatWindows(prev => {
-            if (prev.includes(userId)) {
-                return [...prev.filter(id => id !== userId), userId]; // Move to end to bring to front
-            }
-            if (prev.length >= 3) {
-                 alert("Você só pode abrir 3 janelas de bate-papo por vez.");
-                 return prev;
-            }
-            return [...prev, userId];
-        });
+        const { data, error } = await supabase.from('post_comments').insert({
+            post_id: postId,
+            author_id: currentUser.id,
+            content: content
+        }).select().single();
+    
+        if (error) {
+            console.error("Error adding comment:", error);
+            alert("Não foi possível adicionar o comentário. Tente novamente.");
+        } else if (data) {
+            const newComment: PostComment = {
+                id: data.id,
+                authorId: data.author_id,
+                content: data.content,
+                timestamp: data.created_at
+            };
+            setPosts(prevPosts => prevPosts.map(post => {
+                if (post.id === postId) {
+                    return { ...post, comments: [...post.comments, newComment] };
+                }
+                return post;
+            }));
+        }
     };
 
-    const handleCloseChat = (userId: number) => {
+    const handleUpdateProfile = async (updatedData: Partial<User>, navigateOnSuccess: boolean = true) => {
+        if (!currentUser) return;
+
+        // The 'profiles' table uses the user's UUID as the primary key.
+        const { error } = await supabase
+            .from('profiles')
+            .update(updatedData)
+            .eq('id', currentUser.id);
+
+        if (error) {
+            console.error("Error updating profile:", error);
+            alert("Não foi possível atualizar o perfil.");
+        } else {
+            // Optimistic update of local state
+            const updatedUser = { ...currentUser, ...updatedData };
+            setCurrentUser(updatedUser);
+            // Also update the master user list
+            setUsers(prev => ({ ...prev, [currentUser.id]: updatedUser }));
+            
+            if (navigateOnSuccess) {
+                 handleNavigate('profile');
+            }
+        }
+    };
+
+    const handleOpenChat = (userId: string) => {
+        if (!openChatWindows.includes(userId)) {
+            setOpenChatWindows(prev => [...prev, userId]);
+        }
+    };
+
+    const handleCloseChat = (userId: string) => {
         setOpenChatWindows(prev => prev.filter(id => id !== userId));
     };
 
-    const handleSendMessage = (recipientId: number, content: string) => {
+    const handleSendChatMessage = async (recipientId: string, content: string) => {
         if (!currentUser) return;
-        const newMessage: ChatMessage = {
-            id: Date.now(),
-            senderId: currentUser.id,
-            recipientId: recipientId,
-            content: content,
-            timestamp: new Date().toISOString(),
-            read: true,
-        };
-        setChatMessages(prev => [...prev, newMessage]);
 
-        // Simulate a reply from the bot
-        setTimeout(() => {
-            const replies = ["kkkk", "Nossa, sério?", "Que legal!", "Entendi.", "Depois a gente se fala melhor.", "hahaha, com certeza!", "Top!", "Tô ocupado agora, depois respondo.", "👍"];
-            const replyContent = replies[Math.floor(Math.random() * replies.length)];
-            const replyMessage: ChatMessage = {
-                id: Date.now() + 1,
-                senderId: recipientId,
-                recipientId: currentUser.id,
-                content: replyContent,
-                timestamp: new Date().toISOString(),
-                read: false,
+        const { data, error } = await supabase.from('chat_messages').insert({
+            sender_id: currentUser.id,
+            recipient_id: recipientId,
+            content: content,
+        }).select().single();
+
+        if (error) {
+            console.error("Error sending chat message:", error);
+        } else if (data) {
+             const newMessage: ChatMessage = {
+                id: data.id,
+                senderId: data.sender_id,
+                recipientId: data.recipient_id,
+                content: data.content,
+                timestamp: data.created_at,
+                read: false, // It's read by default for the sender
             };
-            setChatMessages(prev => [...prev, replyMessage]);
-        }, Math.random() * 2000 + 1000); // Reply between 1-3 seconds
+            setChatMessages(prev => [...prev, newMessage]);
+        }
     };
 
 
-    if (!currentUser || !loggedInUserId) {
-        return <LoginPage onLogin={handleLogin} onCreateAccount={handleCreateAccount} existingUsers={Object.values(users)} />;
+    if (loading) {
+        return <div className="bg-gray-100 min-h-screen flex items-center justify-center">Carregando OldKut...</div>;
+    }
+
+    if (!session || !currentUser) {
+        return <LoginPage />;
     }
     
-    if (!viewedUser) {
+    if (!viewedUser && currentPage === 'profile') {
         return <div>Carregando perfil...</div>;
     }
 
     const currentTheme = THEMES[currentUser.theme] || THEMES.classic;
-    const isBlocked = currentUser.blockedUserIds.includes(viewedUser.id) || viewedUser.blockedUserIds.includes(currentUser.id);
+    
+    // This is a simplified version. In a real app, this data would be fetched on demand.
+    const friends = (currentUser.friends || []).map(id => users[id]).filter(Boolean);
 
-    const viewedUserCommunities = viewedUser?.communities.map(id => MOCK_COMMUNITIES[id]).filter(Boolean) || [];
-    const friends = currentUser.friends.map(id => users[id]).filter(Boolean);
-    const pendingRequests = currentUser.friendRequests.map(id => users[id]).filter(Boolean);
-    const viewedUserScraps = scraps.filter(s => s.recipientId === viewedUser.id);
-    const viewedUserTestimonials = testimonials.filter(t => t.recipientId === viewedUser.id);
-    const postFeed = posts.filter(post => currentUser.friends.includes(post.authorId) || post.authorId === currentUser.id);
+    // Dummy data until fully implemented
+    const pendingRequests: User[] = [];
+    const viewedUserScraps: Scrap[] = [];
+    const viewedUserTestimonials: Testimonial[] = [];
+    const viewedUserCommunities: Community[] = [];
+    const recentVisitors: User[] = [];
 
-    // Fix: Cast user to the User type to resolve errors where properties were being accessed on an 'unknown' type.
-    const availableUsersForSearch = Object.values(users).filter(user => {
-        const typedUser = user as User;
-        return !currentUser.blockedUserIds.includes(typedUser.id) &&
-            !typedUser.blockedUserIds.includes(currentUser.id);
-    });
+    const availableUsersForSearch: User[] = Object.values(users);
 
     const renderPage = () => {
-        if (currentPage === 'profile' && isBlocked && currentUser.id !== viewedUser.id) {
-             return (
-                 <div className={`${currentTheme.panelBg} p-6 rounded-md border ${currentTheme.panelBorder} shadow-sm text-center`}>
-                     <h2 className={`text-xl font-light ${currentTheme.subtleText} mb-4`}>
-                         Usuário Bloqueado
-                     </h2>
-                     <p className={`${currentTheme.text}`}>
-                         Você não pode ver o perfil deste usuário.
-                     </p>
-                    {currentUser.blockedUserIds.includes(viewedUser.id) && (
-                         <button onClick={() => handleUnblockUser(viewedUser.id)} className={`mt-4 ${currentTheme.button} ${currentTheme.buttonText} text-sm font-bold py-1 px-4 rounded-md hover:opacity-90`}>
-                            Desbloquear
-                         </button>
-                     )}
-                 </div>
-             );
-        }
-        
         switch(currentPage) {
-            case 'friends':
-                return <FriendsPage friends={friends} pendingRequests={pendingRequests} onAcceptRequest={handleAcceptRequest} onRejectRequest={handleRejectRequest} onViewProfile={handleViewProfile} theme={currentTheme} />;
-            case 'editProfile':
-                 return <EditProfilePage currentUser={currentUser} onUpdateProfile={handleUpdateProfile} onCancel={() => handleViewProfile(currentUser.id)} theme={currentTheme} />;
-            case 'communities':
-                 return <CommunitiesPage allCommunities={Object.values(MOCK_COMMUNITIES)} userCommunities={currentUser.communities} onToggleCommunity={handleToggleCommunityMembership} onViewCommunity={handleViewCommunity} theme={currentTheme} />;
-            case 'photos':
+            case 'profile':
+                if (!viewedUser) return <div>Carregando perfil...</div>;
+                return (
+                     <MainContent 
+                        currentUser={currentUser} 
+                        viewedUser={viewedUser} 
+                        users={users}
+                        scraps={viewedUserScraps} 
+                        testimonials={viewedUserTestimonials} 
+                        communities={viewedUserCommunities} 
+                        recentVisitors={recentVisitors}
+                        addScrap={async (content) => console.log("Add scrap", content, viewedUser.id)} 
+                        addTestimonial={async (content) => console.log("Add testimonial", content, viewedUser.id)} 
+                        approveTestimonial={async (id) => console.log("Approve testimonial", id)} 
+                        rejectTestimonial={async (id) => console.log("Reject testimonial", id)} 
+                        onViewProfile={handleViewProfile} 
+                        onNavigate={handleNavigate}
+                        onViewCommunity={handleViewCommunity}
+                        onToggleOrkutear={async (id, type) => console.log("Toggle orkutear", id, type)}
+                        onSendFriendRequest={async (id) => console.log("Send friend request", id)}
+                        onBlockUser={async (id) => console.log("Block user", id)}
+                        onUnblockUser={async (id) => console.log("Unblock user", id)}
+                        theme={currentTheme}
+                        initialProfileTab={initialProfileTab}
+                        onClearInitialTab={() => setInitialProfileTab(null)}
+                    />
+                );
+            case 'posts':
+                return (
+                    <PostsPage
+                        posts={posts}
+                        users={users}
+                        currentUser={currentUser}
+                        onAddPost={handleAddPost}
+                        onToggleLike={handleToggleLike}
+                        onAddComment={handleAddComment}
+                        onViewProfile={handleViewProfile}
+                        theme={currentTheme}
+                    />
+                );
+             case 'photos':
                 return <PhotosPage theme={currentTheme} />;
             case 'videos':
                 return <VideosPage theme={currentTheme} currentUser={currentUser} />;
-            case 'posts':
-                return <PostsPage 
-                            posts={postFeed}
-                            users={users}
-                            currentUser={currentUser}
-                            onAddPost={handleAddPost}
-                            onToggleLike={handleTogglePostLike}
-                            onAddComment={handleAddPostComment}
-                            onViewProfile={handleViewProfile}
-                            theme={currentTheme} 
-                        />;
+            case 'communities':
+                return <CommunitiesPage allCommunities={Object.values(communities)} userCommunities={currentUser.communities} onToggleCommunity={async (id) => console.log("Toggle community", id)} onViewCommunity={handleViewCommunity} onCreateCommunity={async (name, url) => console.log("Create community", name, url)} theme={currentTheme} />;
             case 'communityDetail':
-                 if (!viewedCommunity) return <div>Comunidade não encontrada.</div>
+                 if (!viewedCommunity) return <div>Carregando comunidade...</div>;
                  return <CommunityDetailPage community={viewedCommunity} theme={currentTheme} />;
-            case 'profile':
-            default:
+            case 'friends':
                 return (
-                    <div className="flex flex-col md:flex-row md:space-x-4">
-                        <ProfileSidebar 
-                            currentUser={currentUser} 
-                            viewedUser={viewedUser} 
-                            onSendFriendRequest={handleSendFriendRequest} 
-                            onNavigate={handleNavigate} 
-                            onViewProfile={handleViewProfile} 
-                            onBlockUser={handleBlockUser}
-                            onUnblockUser={handleUnblockUser}
-                            theme={currentTheme} 
-                        />
-                        <MainContent 
-                            currentUser={currentUser} 
-                            viewedUser={viewedUser} 
-                            users={users}
-                            scraps={viewedUserScraps} 
-                            testimonials={viewedUserTestimonials} 
-                            communities={viewedUserCommunities} 
-                            addScrap={(content) => handleAddScrap(content, viewedUser.id)} 
-                            addTestimonial={(content) => handleAddTestimonial(content, viewedUser.id)} 
-                            approveTestimonial={handleApproveTestimonial} 
-                            rejectTestimonial={handleRejectTestimonial} 
-                            onViewProfile={handleViewProfile} 
-                            onNavigate={handleNavigate}
-                            onViewCommunity={handleViewCommunity}
-                            onToggleOrkutear={handleToggleOrkutear}
-                            theme={currentTheme} 
-                        />
-                    </div>
+                    <FriendsPage
+                        friends={friends}
+                        pendingRequests={pendingRequests}
+                        onAcceptRequest={async (id) => console.log("Accept request", id)}
+                        onRejectRequest={async (id) => console.log("Reject request", id)}
+                        onViewProfile={handleViewProfile}
+                        theme={currentTheme}
+                    />
                 );
+            case 'settings':
+                return (
+                    <SettingsPage
+                        currentUser={currentUser}
+                        onUpdateProfile={handleUpdateProfile}
+                        onCancel={() => handleNavigate('profile')}
+                        theme={currentTheme}
+                    />
+                );
+            default:
+                return <div>Página não encontrada</div>;
         }
     };
     
@@ -567,49 +456,56 @@ const App: React.FC = () => {
                 currentUser={currentUser} 
                 onNavigate={handleNavigate} 
                 onViewProfile={handleViewProfile} 
-                pendingRequestsCount={currentUser.friendRequests.length} 
+                pendingRequestsCount={pendingRequests.length} 
                 allUsers={availableUsersForSearch} 
                 onLogout={handleLogout} 
-                onThemeChange={handleThemeChange}
                 theme={currentTheme} 
             />
-            <main className="container mx-auto px-4 py-4 flex-grow">
-                {renderPage()}
+            <main className="container mx-auto px-4 py-4 flex-grow flex space-x-4">
+                <ProfileSidebar
+                    currentUser={currentUser}
+                    onNavigate={handleNavigate}
+                    onViewProfile={handleViewProfile}
+                    theme={currentTheme}
+                    currentPage={currentPage}
+                />
+                <div className="flex-1 min-w-0">
+                    {renderPage()}
+                </div>
             </main>
             <footer className={`w-full ${currentTheme.footer} ${currentTheme.headerText} text-center py-2 text-xs shadow-inner mt-4`}>
                 <p>© {new Date().getFullYear()} OldKut by André Azevedo. All rights reserved.</p>
             </footer>
-
-            {/* Chat UI */}
-            <div className="fixed bottom-0 right-4 flex items-end space-x-4 z-50">
-                {openChatWindows.map((friendId, index) => {
-                    const friend = users[friendId];
+            
+            <ChatSidebar 
+                friends={friends} 
+                chatMessages={chatMessages} 
+                currentUser={currentUser} 
+                onOpenChat={handleOpenChat} 
+                theme={currentTheme} 
+            />
+            <div className="fixed bottom-0 right-96 flex items-end space-x-4">
+                {openChatWindows.map((userId, index) => {
+                    const friend = users[userId];
                     if (!friend) return null;
-                    const messages = chatMessages.filter(
-                        msg => (msg.senderId === currentUser.id && msg.recipientId === friendId) || (msg.senderId === friendId && msg.recipientId === currentUser.id)
-                    ).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-
+                    const messagesForWindow = chatMessages.filter(m => 
+                        (m.senderId === userId && m.recipientId === currentUser.id) || 
+                        (m.senderId === currentUser.id && m.recipientId === userId)
+                    );
                     return (
                         <ChatWindow
-                            key={friendId}
+                            key={userId}
                             currentUser={currentUser}
                             friend={friend}
-                            messages={messages}
-                            onSendMessage={(content) => handleSendMessage(friendId, content)}
-                            onClose={() => handleCloseChat(friendId)}
+                            messages={messagesForWindow}
+                            onSendMessage={(content) => handleSendChatMessage(userId, content)}
+                            onClose={() => handleCloseChat(userId)}
                             theme={currentTheme}
-                            zIndex={100 + index} // To stack windows correctly
+                            zIndex={100 + index}
                         />
                     );
                 })}
             </div>
-            <ChatSidebar 
-                friends={friends}
-                chatMessages={chatMessages}
-                currentUser={currentUser}
-                onOpenChat={handleOpenChat}
-                theme={currentTheme}
-            />
         </div>
     );
 };

@@ -1,149 +1,76 @@
 // Fix: Create the ProfileSidebar component.
 import React from 'react';
 import type { User } from '../types';
-import { StarIcon, CameraIcon, VideoIcon, MessageIcon, UserIcon, GroupIcon, NewspaperIcon } from './icons';
-
-interface FriendshipProps {
-    currentUser: User;
-    viewedUser: User;
-    onSendFriendRequest: (recipientId: number) => void;
-    onNavigate: (page: 'profile' | 'friends' | 'editProfile' | 'communities' | 'photos' | 'videos' | 'posts') => void;
-    onBlockUser: (userId: number) => void;
-    onUnblockUser: (userId: number) => void;
-    theme: { [key: string]: string };
-}
-
-const FriendshipStatus: React.FC<FriendshipProps> = ({ currentUser, viewedUser, onSendFriendRequest, onNavigate, onBlockUser, onUnblockUser, theme }) => {
-    const isBlockedByYou = currentUser.blockedUserIds.includes(viewedUser.id);
-
-    if (currentUser.id === viewedUser.id) {
-        return <button onClick={() => onNavigate('editProfile')} className={`text-sm ${theme.link} hover:underline`}>Editar meu perfil</button>;
-    }
-    
-    if (isBlockedByYou) {
-         return (
-             <div className="text-center">
-                <p className={`text-sm ${theme.subtleText} italic`}>Usuário bloqueado.</p>
-                <button onClick={() => onUnblockUser(viewedUser.id)} className={`text-xs ${theme.link} hover:underline mt-1`}>Desbloquear</button>
-            </div>
-        );
-    }
-
-    if (currentUser.friends.includes(viewedUser.id)) {
-        return <p className={`text-sm ${theme.subtleText} flex items-center justify-center space-x-1`}><UserIcon /><span>Amigos</span></p>;
-    }
-
-    if (currentUser.sentRequests.includes(viewedUser.id)) {
-        return <p className={`text-sm ${theme.subtleText} italic text-center`}>Pedido de amizade enviado</p>;
-    }
-
-    if (currentUser.friendRequests.includes(viewedUser.id)) {
-        return <button onClick={() => onNavigate('friends')} className={`text-sm ${theme.subtleText} italic text-center hover:underline`}>Responder ao pedido</button>;
-    }
-
-    return (
-        <button 
-            onClick={() => onSendFriendRequest(viewedUser.id)}
-            className={`w-full ${theme.button} ${theme.buttonText} text-sm font-bold py-1 px-4 rounded-md hover:opacity-90`}
-        >
-            Adicionar aos amigos
-        </button>
-    );
-};
+import { CameraIcon, VideoIcon, MessageIcon, UserIcon, GroupIcon, NewspaperIcon, SettingsIcon } from './icons';
+import type { ActiveTab, CurrentPage } from '../App';
 
 interface ProfileSidebarProps {
     currentUser: User;
-    viewedUser: User;
-    onSendFriendRequest: (recipientId: number) => void;
-    onNavigate: (page: 'profile' | 'friends' | 'editProfile' | 'communities' | 'photos' | 'videos' | 'posts') => void;
-    onViewProfile: (userId: number) => void;
-    onBlockUser: (userId: number) => void;
-    onUnblockUser: (userId: number) => void;
+    onNavigate: (page: CurrentPage) => void;
+    onViewProfile: (userId: string, options?: { initialTab?: ActiveTab }) => void;
     theme: { [key: string]: string };
+    currentPage: CurrentPage;
 }
 
-const ProfileSidebar: React.FC<ProfileSidebarProps> = ({ currentUser, viewedUser, onSendFriendRequest, onNavigate, onViewProfile, onBlockUser, onUnblockUser, theme }) => {
-    return (
-        <aside className="w-64 flex-shrink-0">
-            <div className={`${theme.panelBg} rounded-md border ${theme.panelBorder} shadow-sm overflow-hidden`}>
-                <div className="relative">
-                    <img src={viewedUser.bannerUrl} alt={`${viewedUser.name}'s banner`} className="w-full h-24 object-cover" />
-                    <img src={viewedUser.profilePicUrl} alt={viewedUser.name} className={`w-24 h-24 rounded-md absolute -bottom-12 left-1/2 -translate-x-1/2 border-4 ${theme.panelBorder}`} />
+const ProfileSidebar: React.FC<ProfileSidebarProps> = ({ currentUser, onNavigate, onViewProfile, theme, currentPage }) => {
+    
+    const NavLink: React.FC<{
+        icon: React.ReactNode;
+        page: CurrentPage | CurrentPage[];
+        label: string;
+        onClick: () => void;
+    }> = ({ icon, page, label, onClick }) => {
+        const pages = Array.isArray(page) ? page : [page];
+        const isActive = pages.includes(currentPage);
+        
+        return (
+            <li className={`flex items-center space-x-2 p-1 rounded-md ${isActive ? theme.subtleBg : ''}`}>
+                <div className={`w-6 h-6 flex items-center justify-center ${isActive ? theme.text : theme.subtleText}`}>
+                    {icon}
                 </div>
-                <div className="pt-14 p-3">
-                    <h2 className={`text-lg font-bold ${theme.link} mt-2 text-center`}>{viewedUser.name}</h2>
-                    <div className={`text-sm ${theme.subtleText} mt-2 space-y-1 text-center`}>
-                        <p>{viewedUser.relationship}, {viewedUser.occupation}</p>
-                        <p>{viewedUser.city}, {viewedUser.country}</p>
-                    </div>
-                    <div className={`mt-3 border-t ${theme.panelBorder} pt-3`}>
-                        <FriendshipStatus 
-                            currentUser={currentUser} 
-                            viewedUser={viewedUser} 
-                            onSendFriendRequest={onSendFriendRequest} 
-                            onNavigate={onNavigate} 
-                            onBlockUser={onBlockUser}
-                            onUnblockUser={onUnblockUser}
-                            theme={theme} 
+                <button 
+                    onClick={onClick} 
+                    className={`text-sm ${isActive ? `font-bold ${theme.text}` : `${theme.link} hover:underline`}`}
+                >
+                    {label}
+                </button>
+            </li>
+        );
+    };
+    
+    return (
+        <aside className="w-64 flex-shrink-0 space-y-4">
+            <div className={`${theme.panelBg} rounded-md border ${theme.panelBorder} shadow-sm overflow-hidden`}>
+                <div className="relative h-24 bg-gray-200">
+                    <img src={currentUser.bannerUrl} alt={`${currentUser.name}'s banner`} className="w-full h-full object-cover" />
+                    <div className="absolute -bottom-12 left-1/2 -translate-x-1/2">
+                        <img 
+                            src={currentUser.profilePicUrl} 
+                            alt={currentUser.name} 
+                            className={`w-24 h-24 rounded-md border-4 ${theme.panelBorder} shadow-lg`} 
                         />
                     </div>
-                     {currentUser.id !== viewedUser.id && !currentUser.blockedUserIds.includes(viewedUser.id) && (
-                        <div className="text-center mt-2">
-                            <button onClick={() => onBlockUser(viewedUser.id)} className={`text-xs ${theme.subtleText} hover:underline`}>Bloquear usuário</button>
-                        </div>
-                    )}
+                </div>
+                <div className="pt-14 p-3 text-center">
+                    <h2 className={`text-lg font-bold ${theme.link}`}>{currentUser.name}</h2>
+                    <p className={`text-sm ${theme.subtleText} truncate`}>{currentUser.city}, {currentUser.country}</p>
                 </div>
             </div>
 
-            <div className={`${theme.panelBg} p-3 rounded-md border ${theme.panelBorder} shadow-sm mt-4`}>
-                <ul className="space-y-2 text-sm">
-                    <li className="flex items-center space-x-2">
-                        <UserIcon />
-                        <button onClick={() => onViewProfile(currentUser.id)} className={`${theme.link} hover:underline`}>Meu Perfil</button>
+            <div className={`${theme.panelBg} p-3 rounded-md border ${theme.panelBorder} shadow-sm`}>
+                <ul className="space-y-1">
+                    <NavLink icon={<UserIcon className="w-5 h-5"/>} page="profile" label="Meu Perfil" onClick={() => onNavigate('profile')} />
+                    <NavLink icon={<NewspaperIcon className="w-5 h-5"/>} page="posts" label="Posts" onClick={() => onNavigate('posts')} />
+                    {/* Meus Recados is a special tab on the profile page */}
+                    <li className="flex items-center space-x-2 p-1">
+                        <div className={`w-6 h-6 flex items-center justify-center ${theme.subtleText}`}><MessageIcon className="w-5 h-5" /></div>
+                        <button onClick={() => onViewProfile(currentUser.id, { initialTab: 'scraps' })} className={`text-sm ${theme.link} hover:underline`}>Meus Recados</button>
                     </li>
-                     <li className="flex items-center space-x-2">
-                        <NewspaperIcon />
-                        <button onClick={() => onNavigate('posts')} className={`${theme.link} hover:underline`}>Posts</button>
-                    </li>
-                    <li className="flex items-center space-x-2">
-                        <MessageIcon />
-                        <button onClick={() => onViewProfile(viewedUser.id)} className={`${theme.link} hover:underline`}>Recados</button>
-                    </li>
-                    <li className="flex items-center space-x-2">
-                        <CameraIcon />
-                        <button onClick={() => onNavigate('photos')} className={`${theme.link} hover:underline`}>Fotos</button>
-                    </li>
-                     <li className="flex items-center space-x-2">
-                        <VideoIcon />
-                        <button onClick={() => onNavigate('videos')} className={`${theme.link} hover:underline`}>Vídeos</button>
-                    </li>
-                    <li className="flex items-center space-x-2">
-                        <GroupIcon />
-                        <button onClick={() => onNavigate('communities')} className={`${theme.link} hover:underline`}>Comunidades</button>
-                    </li>
+                    <NavLink icon={<CameraIcon className="w-5 h-5"/>} page="photos" label="Fotos" onClick={() => onNavigate('photos')} />
+                    <NavLink icon={<VideoIcon className="w-5 h-5"/>} page="videos" label="Vídeos" onClick={() => onNavigate('videos')} />
+                    <NavLink icon={<GroupIcon className="w-5 h-5"/>} page={['communities', 'communityDetail']} label="Comunidades" onClick={() => onNavigate('communities')} />
+                    <NavLink icon={<SettingsIcon className="w-5 h-5"/>} page="settings" label="Configurações" onClick={() => onNavigate('settings')} />
                 </ul>
-            </div>
-            
-            <div className={`${theme.panelBg} p-3 rounded-md border ${theme.panelBorder} shadow-sm mt-4`}>
-                <h3 className={`font-bold ${theme.text} mb-2`}>Social</h3>
-                <div className={`flex justify-around text-center text-sm ${theme.subtleText}`}>
-                    <div>
-                        <span className="font-bold block">{viewedUser.friends.length}</span>
-                        <span>amigos</span>
-                    </div>
-                    <div>
-                        <span className="font-bold block">12</span>
-                        <span>fotos</span>
-                    </div>
-                    <div>
-                        <span className="font-bold block">5</span>
-                        <span>fãs</span>
-                    </div>
-                    <div>
-                        <span className="font-bold block">9/10</span>
-                        <span className="flex items-center justify-center"><StarIcon /></span>
-                    </div>
-                </div>
             </div>
         </aside>
     );

@@ -1,31 +1,30 @@
 import React, { useState } from 'react';
 import type { User } from '../types';
-import { SearchIcon, PaletteIcon } from './icons';
-import { THEMES } from '../App';
+import { SearchIcon } from './icons';
 
 interface HeaderProps {
     currentUser: User;
     onNavigate: (page: 'profile' | 'friends' | 'communities' | 'posts') => void;
-    onViewProfile: (userId: number) => void;
+    onViewProfile: (userId: string) => void;
     pendingRequestsCount: number;
     allUsers: User[];
     onLogout: () => void;
-    onThemeChange: (themeKey: string) => void;
     theme: { [key: string]: string };
 }
 
-const Header: React.FC<HeaderProps> = ({ currentUser, onNavigate, onViewProfile, pendingRequestsCount, allUsers, onLogout, onThemeChange, theme }) => {
+const Header: React.FC<HeaderProps> = ({ currentUser, onNavigate, onViewProfile, pendingRequestsCount, allUsers, onLogout, theme }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [searchResults, setSearchResults] = useState<User[]>([]);
-    const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
 
     const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const term = e.target.value;
         setSearchTerm(term);
 
         if (term.trim()) {
+            const lowercasedTerm = term.toLowerCase();
             const results = allUsers.filter(user =>
-                user.name.toLowerCase().includes(term.toLowerCase()) && user.id !== currentUser.id
+                (user.name.toLowerCase().includes(lowercasedTerm) || user.city.toLowerCase().includes(lowercasedTerm)) 
+                && user.id !== currentUser.id
             );
             setSearchResults(results);
         } else {
@@ -33,21 +32,16 @@ const Header: React.FC<HeaderProps> = ({ currentUser, onNavigate, onViewProfile,
         }
     };
 
-    const handleProfileClick = (userId: number) => {
+    const handleProfileClick = (userId: string) => {
         setSearchTerm('');
         setSearchResults([]);
         onViewProfile(userId);
-    };
-
-    const handleSelectTheme = (themeKey: string) => {
-        onThemeChange(themeKey);
-        setIsThemeMenuOpen(false);
     };
     
     return (
         <header className={`${theme.header} ${theme.headerText} shadow-md`}>
             <div className="container mx-auto px-4 py-2 flex justify-between items-center">
-                <h1 className="text-2xl font-bold">OldKut</h1>
+                <button onClick={() => onNavigate('profile')} className="text-2xl font-bold">OldKut</button>
                 
                 <div className="relative flex-grow max-w-lg mx-4">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -79,8 +73,6 @@ const Header: React.FC<HeaderProps> = ({ currentUser, onNavigate, onViewProfile,
 
                 <div className="flex items-center">
                     <nav className="flex items-center space-x-6">
-                        <button onClick={() => onNavigate('profile')} className="hover:opacity-80">Início</button>
-                        <button onClick={() => onNavigate('posts')} className="hover:opacity-80">Posts</button>
                         <button onClick={() => onNavigate('friends')} className="relative hover:opacity-80">
                             Amigos
                             {pendingRequestsCount > 0 && (
@@ -89,40 +81,11 @@ const Header: React.FC<HeaderProps> = ({ currentUser, onNavigate, onViewProfile,
                                 </span>
                             )}
                         </button>
-                        <button onClick={() => onNavigate('communities')} className="hover:opacity-80">Comunidades</button>
                     </nav>
                     <div className="flex items-center space-x-4 ml-6">
                         <div className="flex items-center space-x-2">
                             <img src={currentUser.avatarUrl} alt={currentUser.name} className="w-6 h-6 rounded-full" />
                             <span className="text-sm">{currentUser.name}</span>
-                        </div>
-                         <div className="relative">
-                            <button onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)} className="hover:opacity-80">
-                                <PaletteIcon className="w-5 h-5" />
-                            </button>
-                            {isThemeMenuOpen && (
-                                <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-20" onMouseLeave={() => setIsThemeMenuOpen(false)}>
-                                    <div className={`p-2 text-xs font-bold ${theme.panelBorder} border-b text-gray-500`}>
-                                        Mudar o tema
-                                    </div>
-                                    <ul className="py-1">
-                                        {Object.entries({classic: 'Azul Clássico', pink: 'Rosa Vibrante', green: 'Verde Sereno', dark: 'Modo Escuro'}).map(([key, name]) => (
-                                            <li key={key}>
-                                                <button
-                                                    onClick={() => handleSelectTheme(key)}
-                                                    className="w-full text-left flex items-center space-x-3 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                                                >
-                                                    <div className="flex -space-x-1.5 border border-gray-300 rounded-full">
-                                                        <span className={`block w-4 h-4 rounded-l-full ${THEMES[key].bg}`}></span>
-                                                        <span className={`block w-4 h-4 rounded-r-full ${THEMES[key].header}`}></span>
-                                                    </div>
-                                                    <span>{name}</span>
-                                                </button>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            )}
                         </div>
                         <button onClick={onLogout} className="text-xs opacity-70 hover:underline">Sair</button>
                     </div>

@@ -1,13 +1,63 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { User, Scrap, Testimonial, Community } from '../types';
-import { HeartIcon } from './icons';
+import { HeartIcon, UserIcon, EyeIcon } from './icons';
+import type { ActiveTab, CurrentPage } from '../App';
+
+
+interface FriendshipProps {
+    currentUser: User;
+    viewedUser: User;
+    onSendFriendRequest: (recipientId: string) => void;
+    onNavigate: (page: 'friends' | 'settings') => void;
+    onBlockUser: (userId: string) => void;
+    onUnblockUser: (userId: string) => void;
+    theme: { [key: string]: string };
+}
+
+const FriendshipStatus: React.FC<FriendshipProps> = ({ currentUser, viewedUser, onSendFriendRequest, onNavigate, onBlockUser, onUnblockUser, theme }) => {
+    const isBlockedByYou = currentUser.blockedUserIds.includes(viewedUser.id);
+
+    if (currentUser.id === viewedUser.id) {
+        return null; // Edit profile button is now in sidebar
+    }
+    
+    if (isBlockedByYou) {
+         return (
+             <div className="text-center">
+                <p className={`text-sm ${theme.subtleText} italic`}>Usuário bloqueado.</p>
+                <button onClick={() => onUnblockUser(viewedUser.id)} className={`text-xs ${theme.link} hover:underline mt-1`}>Desbloquear</button>
+            </div>
+        );
+    }
+
+    if (currentUser.friends.includes(viewedUser.id)) {
+        return <p className={`text-sm ${theme.subtleText} flex items-center justify-center space-x-1`}><UserIcon className="w-4 h-4" /><span>Amigos</span></p>;
+    }
+
+    if (currentUser.sentRequests.includes(viewedUser.id)) {
+        return <p className={`text-sm ${theme.subtleText} italic text-center`}>Pedido de amizade enviado</p>;
+    }
+
+    if (currentUser.friendRequests.includes(viewedUser.id)) {
+        return <button onClick={() => onNavigate('friends')} className={`text-sm ${theme.subtleText} italic text-center hover:underline`}>Responder ao pedido</button>;
+    }
+
+    return (
+        <button 
+            onClick={() => onSendFriendRequest(viewedUser.id)}
+            className={`w-full ${theme.button} ${theme.buttonText} text-sm font-bold py-1 px-4 rounded-md hover:opacity-90`}
+        >
+            Adicionar aos amigos
+        </button>
+    );
+};
 
 interface ScrapListProps {
   scraps: Scrap[];
-  users: { [key: number]: User };
-  onViewProfile: (userId: number) => void;
+  users: { [key: string]: User };
+  onViewProfile: (userId: string) => void;
   onToggleOrkutear: (itemId: number, itemType: 'scrap' | 'testimonial') => void;
-  currentUserId: number;
+  currentUserId: string;
   theme: { [key: string]: string };
 }
 
@@ -49,13 +99,13 @@ const ScrapList: React.FC<ScrapListProps> = ({ scraps, users, onViewProfile, onT
 
 interface TestimonialListProps {
     testimonials: Testimonial[];
-    users: { [key: number]: User };
+    users: { [key: string]: User };
     approveTestimonial: (id: number) => void;
     rejectTestimonial: (id: number) => void;
     isOwnProfile: boolean;
-    onViewProfile: (userId: number) => void;
+    onViewProfile: (userId: string) => void;
     onToggleOrkutear: (itemId: number, itemType: 'testimonial') => void;
-    currentUserId: number;
+    currentUserId: string;
     theme: { [key: string]: string };
 }
 
@@ -209,27 +259,47 @@ const CommunityList: React.FC<{ communities: Community[], theme: { [key: string]
 interface MainContentProps {
   currentUser: User;
   viewedUser: User;
-  users: { [key: number]: User };
+  users: { [key: string]: User };
   scraps: Scrap[];
   testimonials: Testimonial[];
   communities: Community[];
+  recentVisitors: User[];
   addScrap: (content: string) => void;
   addTestimonial: (content: string) => void;
   approveTestimonial: (id: number) => void;
   rejectTestimonial: (id: number) => void;
-  onViewProfile: (userId: number) => void;
-  onNavigate: (page: 'communities') => void;
+  onViewProfile: (userId: string, options?: { initialTab?: ActiveTab }) => void;
+  onNavigate: (page: CurrentPage) => void;
   onViewCommunity: (communityId: number) => void;
   onToggleOrkutear: (itemId: number, itemType: 'scrap' | 'testimonial') => void;
+  onSendFriendRequest: (recipientId: string) => void;
+  onBlockUser: (userId: string) => void;
+  onUnblockUser: (userId: string) => void;
   theme: { [key: string]: string };
+  initialProfileTab: ActiveTab | null;
+  onClearInitialTab: () => void;
 }
 
-type ActiveTab = 'scraps' | 'testimonials';
-
-const MainContent: React.FC<MainContentProps> = ({ currentUser, viewedUser, users, scraps, testimonials, communities, addScrap, addTestimonial, approveTestimonial, rejectTestimonial, onViewProfile, onNavigate, onViewCommunity, onToggleOrkutear, theme }) => {
+const MainContent: React.FC<MainContentProps> = ({ 
+    currentUser, viewedUser, users, scraps, testimonials, communities, 
+    recentVisitors, addScrap, addTestimonial, approveTestimonial, rejectTestimonial, 
+    onViewProfile, onNavigate, onViewCommunity, onToggleOrkutear,
+    onSendFriendRequest, onBlockUser, onUnblockUser,
+    theme, initialProfileTab, onClearInitialTab 
+}) => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('scraps');
   const isOwnProfile = currentUser.id === viewedUser.id;
   
+  useEffect(() => {
+    if (initialProfileTab) {
+        setActiveTab(initialProfileTab);
+        onClearInitialTab();
+    } else {
+        // Reset to default tab when profile changes and no initial tab is specified
+        setActiveTab('scraps');
+    }
+  }, [viewedUser.id, initialProfileTab, onClearInitialTab]);
+
   const TabButton: React.FC<{tabName: ActiveTab, label: string}> = ({ tabName, label }) => {
       const isActive = activeTab === tabName;
       const activeStyle = theme.bg === 'bg-gray-800' 
@@ -247,59 +317,111 @@ const MainContent: React.FC<MainContentProps> = ({ currentUser, viewedUser, user
   }
 
   return (
-    <div className="w-full">
-        <div className={`${theme.panelBg} p-4 rounded-md border ${theme.panelBorder} shadow-sm`}>
-            <h2 className={`text-xl font-light ${theme.subtleText} mb-2`}>
-                 {isOwnProfile 
-                    ? `Bem-vindo, ${currentUser.name.split(' ')[0]}!`
-                    : `Perfil de ${viewedUser.name}`
-                }
-            </h2>
-            <div className={`flex border-b ${theme.panelBorder}`}>
-                <TabButton tabName="scraps" label={`Recados (${scraps.length})`} />
-                <TabButton tabName="testimonials" label={`Depoimentos (${testimonials.length})`} />
+    <div className="w-full space-y-4">
+        {/* NEW PROFILE HEADER */}
+        <div className={`${theme.panelBg} rounded-md border ${theme.panelBorder} shadow-sm overflow-hidden`}>
+            <div className="relative">
+                <img src={viewedUser.bannerUrl} alt={`${viewedUser.name}'s banner`} className="w-full h-32 object-cover" />
+                <img src={viewedUser.profilePicUrl} alt={viewedUser.name} className={`w-28 h-28 rounded-md absolute -bottom-14 left-4 border-4 ${theme.panelBorder} shadow-lg`} />
             </div>
-
-            <div className="mt-4">
-                {activeTab === 'scraps' && (
-                    <>
-                        <ScrapWriter viewedUser={viewedUser} onAddScrap={addScrap} theme={theme} />
-                        <ScrapList 
-                            scraps={scraps} 
-                            users={users} 
-                            onViewProfile={onViewProfile} 
-                            onToggleOrkutear={onToggleOrkutear} 
-                            currentUserId={currentUser.id} 
-                            theme={theme}
-                        />
-                    </>
-                )}
-                {activeTab === 'testimonials' && (
-                    <>
-                        {!isOwnProfile && <TestimonialWriter viewedUser={viewedUser} onAddTestimonial={addTestimonial} theme={theme} />}
-                        <TestimonialList 
-                            testimonials={testimonials} 
-                            users={users}
-                            approveTestimonial={approveTestimonial} 
-                            rejectTestimonial={rejectTestimonial} 
-                            isOwnProfile={isOwnProfile}
-                            onViewProfile={onViewProfile}
-                            onToggleOrkutear={onToggleOrkutear}
-                            currentUserId={currentUser.id}
-                            theme={theme}
-                        />
-                    </>
-                )}
+            <div className="pt-2 pb-3 px-4 flex justify-end">
+                <div className="w-full pl-32 text-left">
+                    <h2 className={`text-xl font-bold ${theme.link} mt-2`}>{viewedUser.name}</h2>
+                     <div className={`text-sm ${theme.subtleText} mt-1`}>
+                        <span>{viewedUser.relationship}, {viewedUser.occupation}</span>
+                        <span className="mx-2">&middot;</span>
+                        <span>{viewedUser.city}, {viewedUser.country}</span>
+                    </div>
+                </div>
+                 <div className="w-48 flex-shrink-0">
+                    <FriendshipStatus 
+                        currentUser={currentUser} 
+                        viewedUser={viewedUser} 
+                        onSendFriendRequest={() => onSendFriendRequest(viewedUser.id)}
+                        onNavigate={onNavigate}
+                        onBlockUser={() => onBlockUser(viewedUser.id)}
+                        onUnblockUser={() => onUnblockUser(viewedUser.id)}
+                        theme={theme} 
+                    />
+                 </div>
             </div>
+             {currentUser.id !== viewedUser.id && !currentUser.blockedUserIds.includes(viewedUser.id) && (
+                <div className="text-right pr-4 pb-2">
+                    <button onClick={() => onBlockUser(viewedUser.id)} className={`text-xs ${theme.subtleText} hover:underline`}>Bloquear usuário</button>
+                </div>
+            )}
         </div>
-        
-        <CommunityList 
-            communities={communities} 
-            theme={theme} 
-            title={isOwnProfile ? 'Minhas Comunidades' : `Comunidades de ${viewedUser.name.split(' ')[0]}`} 
-            onNavigate={onNavigate}
-            onViewCommunity={onViewCommunity}
-        />
+
+        {/* CONTENT TABS */}
+        <div className="flex">
+             <div className="w-full">
+                <div className={`${theme.panelBg} p-4 rounded-md border ${theme.panelBorder} shadow-sm`}>
+                    <div className={`flex border-b ${theme.panelBorder}`}>
+                        <TabButton tabName="scraps" label={`Recados (${scraps.length})`} />
+                        <TabButton tabName="testimonials" label={`Depoimentos (${testimonials.length})`} />
+                    </div>
+
+                    <div className="mt-4">
+                        {activeTab === 'scraps' && (
+                            <>
+                                <ScrapWriter viewedUser={viewedUser} onAddScrap={addScrap} theme={theme} />
+                                <ScrapList 
+                                    scraps={scraps} 
+                                    users={users} 
+                                    onViewProfile={onViewProfile} 
+                                    onToggleOrkutear={onToggleOrkutear} 
+                                    currentUserId={currentUser.id} 
+                                    theme={theme}
+                                />
+                            </>
+                        )}
+                        {activeTab === 'testimonials' && (
+                            <>
+                                {!isOwnProfile && <TestimonialWriter viewedUser={viewedUser} onAddTestimonial={addTestimonial} theme={theme} />}
+                                <TestimonialList 
+                                    testimonials={testimonials} 
+                                    users={users}
+                                    approveTestimonial={approveTestimonial} 
+                                    rejectTestimonial={rejectTestimonial} 
+                                    isOwnProfile={isOwnProfile}
+                                    onViewProfile={onViewProfile}
+                                    onToggleOrkutear={onToggleOrkutear}
+                                    currentUserId={currentUser.id}
+                                    theme={theme}
+                                />
+                            </>
+                        )}
+                    </div>
+                </div>
+                
+                {isOwnProfile && recentVisitors.length > 0 && (
+                    <div className={`${theme.panelBg} p-3 rounded-md border ${theme.panelBorder} shadow-sm mt-4`}>
+                        <h3 className={`font-bold ${theme.text} mb-2 flex items-center`}>
+                            <EyeIcon className="w-5 h-5 mr-2" />
+                            <span>Quem me visitou</span>
+                        </h3>
+                        <div className="grid grid-cols-3 gap-2">
+                            {recentVisitors.map(visitor => (
+                                <div key={visitor.id} className="text-center">
+                                    <button onClick={() => onViewProfile(visitor.id)} className="block mx-auto">
+                                        <img src={visitor.profilePicUrl} alt={visitor.name} className="w-16 h-16 rounded-md" />
+                                    </button>
+                                    <button onClick={() => onViewProfile(visitor.id)} className={`text-xs ${theme.link} hover:underline mt-1 block w-full truncate`}>{visitor.name}</button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                <CommunityList 
+                    communities={communities} 
+                    theme={theme} 
+                    title={isOwnProfile ? 'Minhas Comunidades' : `Comunidades de ${viewedUser.name.split(' ')[0]}`} 
+                    onNavigate={onNavigate}
+                    onViewCommunity={onViewCommunity}
+                />
+             </div>
+        </div>
     </div>
   );
 };

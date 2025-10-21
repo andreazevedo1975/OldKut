@@ -1,6 +1,6 @@
 // Fix: Define the data structures for the application.
 export interface User {
-  id: number;
+  id: string;
   name: string;
   profilePicUrl: string;
   avatarUrl:string;
@@ -15,29 +15,29 @@ export interface User {
   interests: string[];
   theme: string; // e.g., 'classic', 'pink', 'dark'
   onlineStatus: 'online' | 'away' | 'offline';
-  friends: number[]; // array of user ids
-  friendRequests: number[]; // array of user ids (INCOMING)
-  sentRequests: number[]; // array of user ids (OUTGOING)
+  friends: string[]; // array of user ids
+  friendRequests: string[]; // array of user ids (INCOMING)
+  sentRequests: string[]; // array of user ids (OUTGOING)
   communities: number[]; // array of community ids
-  blockedUserIds: number[]; // array of user ids
+  blockedUserIds: string[]; // array of user ids
 }
 
 export interface Scrap {
   id: number;
-  authorId: number;
-  recipientId: number;
+  authorId: string;
+  recipientId: string;
   content: string;
   timestamp: string;
-  orkutedByIds: number[]; // array of user ids who liked this
+  orkutedByIds: string[]; // array of user ids who liked this
 }
 
 export interface Testimonial {
   id: number;
-  authorId: number;
-  recipientId: number;
+  authorId: string;
+  recipientId: string;
   content: string;
   approved: boolean;
-  orkutedByIds: number[]; // array of user ids who liked this
+  orkutedByIds: string[]; // array of user ids who liked this
 }
 
 export interface Community {
@@ -49,8 +49,8 @@ export interface Community {
 
 export interface ChatMessage {
     id: number;
-    senderId: number;
-    recipientId: number;
+    senderId: string;
+    recipientId: string;
     content: string;
     timestamp: string; // ISO String
     read: boolean;
@@ -58,16 +58,22 @@ export interface ChatMessage {
 
 export interface PostComment {
   id: number;
-  authorId: number;
+  authorId: string;
   content: string;
   timestamp: string;
 }
 
 export interface Post {
   id: number;
-  authorId: number;
+  authorId: string;
   content: string;
   timestamp: string; // ISO string or relative time string
-  likedByIds: number[];
+  likedByIds: string[];
   comments: PostComment[];
+}
+
+export interface ProfileVisit {
+  visitorId: string;
+  visitedId: string;
+  timestamp: string; // ISO String
 }

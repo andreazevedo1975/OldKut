@@ -4,12 +4,12 @@ import { HeartIcon, MessageIcon } from './icons';
 
 interface PostsPageProps {
     posts: Post[];
-    users: { [key: number]: User };
+    users: { [key: string]: User };
     currentUser: User;
     onAddPost: (content: string) => void;
     onToggleLike: (postId: number) => void;
     onAddComment: (postId: number, content: string) => void;
-    onViewProfile: (userId: number) => void;
+    onViewProfile: (userId: string) => void;
     theme: { [key: string]: string };
 }
 
@@ -57,11 +57,11 @@ const PostCreator: React.FC<{
 
 const PostCard: React.FC<{
     post: Post;
-    users: { [key: number]: User };
+    users: { [key: string]: User };
     currentUser: User;
     onToggleLike: (postId: number) => void;
     onAddComment: (postId: number, content: string) => void;
-    onViewProfile: (userId: number) => void;
+    onViewProfile: (userId: string) => void;
     theme: { [key: string]: string };
 }> = ({ post, users, currentUser, onToggleLike, onAddComment, onViewProfile, theme }) => {
     const [showComments, setShowComments] = useState(false);
@@ -88,7 +88,7 @@ const PostCard: React.FC<{
                 </button>
                 <div>
                     <button onClick={() => onViewProfile(author.id)} className={`font-bold ${theme.link} hover:underline`}>{author.name}</button>
-                    <p className={`text-xs ${theme.subtleText}`}>{post.timestamp}</p>
+                    <p className={`text-xs ${theme.subtleText}`}>{new Date(post.timestamp).toLocaleString('pt-BR')}</p>
                 </div>
             </div>
 
@@ -123,7 +123,7 @@ const PostCard: React.FC<{
                                     <div className={`flex-1 rounded-md p-2 ${theme.subtleBg}`}>
                                         <div className="flex items-baseline space-x-2">
                                             <button onClick={() => onViewProfile(commentAuthor.id)} className={`text-sm font-bold ${theme.link} hover:underline`}>{commentAuthor.name}</button>
-                                            <span className={`text-xs ${theme.subtleText}`}>{comment.timestamp}</span>
+                                            <span className={`text-xs ${theme.subtleText}`}>{new Date(comment.timestamp).toLocaleString('pt-BR')}</span>
                                         </div>
                                         <p className={`text-sm ${theme.text}`}>{comment.content}</p>
                                     </div>

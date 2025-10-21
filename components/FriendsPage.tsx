@@ -5,9 +5,9 @@ import { CheckCircleIcon, XCircleIcon } from './icons';
 interface FriendsPageProps {
     friends: User[];
     pendingRequests: User[];
-    onAcceptRequest: (requesterId: number) => void;
-    onRejectRequest: (requesterId: number) => void;
-    onViewProfile: (userId: number) => void;
+    onAcceptRequest: (requesterId: string) => void;
+    onRejectRequest: (requesterId: string) => void;
+    onViewProfile: (userId: string) => void;
     theme: { [key: string]: string };
 }
 

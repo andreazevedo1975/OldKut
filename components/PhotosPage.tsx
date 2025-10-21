@@ -1,4 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
+import { XIcon } from './icons';
 
 // Define interfaces for better type safety
 interface Photo {
@@ -27,6 +29,8 @@ const PhotosPage: React.FC<PhotosPageProps> = ({ theme }) => {
     const [newAlbumName, setNewAlbumName] = useState('');
     // State for upload loading
     const [isUploading, setIsUploading] = useState<boolean>(false);
+    // State for delete confirmation modal
+    const [deleteConfirmation, setDeleteConfirmation] = useState<{ albumId: number; photoId: number; photoName: string; } | null>(null);
 
     // Handler to open the create album modal
     const handleOpenCreateModal = () => {
@@ -75,6 +79,37 @@ const PhotosPage: React.FC<PhotosPageProps> = ({ theme }) => {
         } else {
             alert("Por favor, selecione um arquivo de imagem válido (JPG, PNG, GIF).");
         }
+    };
+
+    // Handlers for photo deletion
+    const handleDeletePhoto = (e: React.MouseEvent, albumId: number, photoId: number, photoName: string) => {
+        e.stopPropagation();
+        setDeleteConfirmation({ albumId, photoId, photoName });
+    };
+
+    const confirmDeletePhoto = () => {
+        if (!deleteConfirmation) return;
+        const { albumId, photoId } = deleteConfirmation;
+
+        // Find the photo and revoke its URL to prevent memory leaks
+        const albumToUpdate = albums.find(a => a.id === albumId);
+        const photoToDelete = albumToUpdate?.photos.find(p => p.id === photoId);
+        if (photoToDelete) {
+            URL.revokeObjectURL(photoToDelete.url);
+        }
+
+        setAlbums(prevAlbums =>
+            prevAlbums.map(album =>
+                album.id === albumId
+                    ? { ...album, photos: album.photos.filter(photo => photo.id !== photoId) }
+                    : album
+            )
+        );
+        setDeleteConfirmation(null);
+    };
+
+    const cancelDeletePhoto = () => {
+        setDeleteConfirmation(null);
     };
 
     // Clean up object URLs to prevent memory leaks
@@ -148,6 +183,15 @@ const PhotosPage: React.FC<PhotosPageProps> = ({ theme }) => {
                                         alt={photo.name} 
                                         className="w-full h-40 object-cover transform group-hover:scale-105 transition-transform duration-300" 
                                     />
+                                    <div className="absolute top-1 right-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button
+                                            onClick={(e) => handleDeletePhoto(e, viewedAlbum.id, photo.id, photo.name)}
+                                            className="p-1.5 bg-black bg-opacity-60 rounded-full text-white hover:bg-red-500"
+                                            title="Deletar foto"
+                                        >
+                                            <XIcon className="w-4 h-4" />
+                                        </button>
+                                    </div>
                                     <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 p-2 text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-300 truncate">
                                         {photo.name}
                                     </div>
@@ -237,6 +281,34 @@ const PhotosPage: React.FC<PhotosPageProps> = ({ theme }) => {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {deleteConfirmation && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+                    <div className={`${theme.panelBg} p-6 rounded-lg shadow-xl w-full max-w-sm border ${theme.panelBorder}`}>
+                        <h3 className={`text-lg font-bold ${theme.text} mb-4`}>Confirmar Exclusão</h3>
+                        <p className={`${theme.text} text-sm mb-4`}>
+                            Você tem certeza que deseja excluir permanentemente a foto "<strong>{deleteConfirmation.photoName}</strong>"?
+                        </p>
+                        <div className="flex justify-end space-x-3 mt-6">
+                            <button 
+                                type="button" 
+                                onClick={cancelDeletePhoto}
+                                className="bg-gray-200 text-gray-800 text-sm font-bold py-1.5 px-5 rounded-md hover:bg-gray-300"
+                            >
+                                Cancelar
+                            </button>
+                            <button 
+                                type="button" 
+                                onClick={confirmDeletePhoto}
+                                className="bg-red-600 text-white text-sm font-bold py-1.5 px-5 rounded-md hover:bg-red-700"
+                            >
+                                Excluir
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
