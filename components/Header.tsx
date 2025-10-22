@@ -1,236 +1,115 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
-import type { User, Notification } from '../types';
+
+import React, { useState, useRef, useEffect } from 'react';
+import type { User } from '../types';
+import { SearchIcon, BellIcon, MessageIcon, SparklesIcon, UserIcon, SettingsIcon, GroupIcon, NewspaperIcon } from './icons';
 import type { CurrentPage } from '../App';
-import { SearchIcon, BellIcon, UserIcon, HeartIcon, MessageIcon } from './icons';
-
-// --- NOTIFICATIONS PANEL COMPONENT --- //
-
-const getNotificationText = (type: Notification['type']) => {
-    switch (type) {
-        case 'friend_request': return 'enviou um pedido de amizade.';
-        case 'new_like': return 'curtiu seu post.';
-        case 'new_comment': return 'comentou no seu post.';
-        default: return 'interagiu com você.';
-    }
-}
-
-const getNotificationIcon = (type: Notification['type'], theme: { [key: string]: string }) => {
-    const className = `w-5 h-5 ${theme.buttonText}`;
-    switch (type) {
-        case 'friend_request': return <UserIcon className={className} />;
-        case 'new_like': return <HeartIcon filled className={className} />;
-        case 'new_comment': return <MessageIcon className={className} />;
-        default: return null;
-    }
-}
-
-interface NotificationsPanelProps {
-    notifications: Notification[];
-    users: { [key: string]: User };
-    onClose: () => void;
-    onMarkAsRead: (notificationId: number, callback?: () => void) => void;
-    onMarkAllAsRead: () => void;
-    onNavigate: (page: CurrentPage) => void;
-    onViewProfile: (userId: string) => void;
-    theme: { [key: string]: string };
-}
-
-const NotificationsPanel: React.FC<NotificationsPanelProps> = ({ notifications, users, onClose, onMarkAsRead, onMarkAllAsRead, onNavigate, onViewProfile, theme }) => {
-    
-    const handleNotificationClick = (notification: Notification) => {
-        let navigationCallback: (() => void) | undefined;
-
-        switch (notification.type) {
-            case 'friend_request':
-                navigationCallback = () => onNavigate('friends');
-                break;
-            case 'new_like':
-            case 'new_comment':
-                navigationCallback = () => onNavigate('posts');
-                break;
-            default:
-                navigationCallback = undefined;
-        }
-        
-        onMarkAsRead(notification.id, navigationCallback);
-        onClose();
-    };
-
-    return (
-        <div className={`absolute top-full right-0 mt-2 w-80 md:w-96 ${theme.panelBg} border ${theme.panelBorder} rounded-md shadow-lg z-20`}>
-            <div className={`flex justify-between items-center p-3 border-b ${theme.panelBorder}`}>
-                <h3 className={`font-bold ${theme.text}`}>Notificações</h3>
-                {notifications.some(n => !n.read) && (
-                    <button onClick={onMarkAllAsRead} className={`text-xs ${theme.link} hover:underline`}>
-                        Marcar todas como lidas
-                    </button>
-                )}
-            </div>
-            <ul className="max-h-96 overflow-y-auto">
-                {notifications.length > 0 ? (
-                    notifications.map(notification => {
-                        const actor = users[notification.actorId];
-                        if (!actor) return null;
-
-                        return (
-                            <li key={notification.id} className={`${!notification.read ? theme.subtleBg : ''}`}>
-                                <button onClick={() => handleNotificationClick(notification)} className={`w-full text-left flex items-start space-x-3 p-3 ${theme.subtleBgHover}`}>
-                                    <div className="relative">
-                                        <img src={actor.avatarUrl} alt={actor.name} className="w-10 h-10 rounded-full" />
-                                        <span className={`absolute -bottom-1 -right-1 flex items-center justify-center w-5 h-5 rounded-full ${theme.button}`}>
-                                            {getNotificationIcon(notification.type, theme)}
-                                        </span>
-                                    </div>
-                                    <div className="flex-1">
-                                        <p className={`text-sm ${theme.text}`}>
-                                            <span className="font-bold">{actor.name}</span> {getNotificationText(notification.type)}
-                                        </p>
-                                        <p className={`text-xs mt-0.5 ${!notification.read ? 'text-blue-600 font-semibold' : theme.subtleText}`}>
-                                            {new Date(notification.timestamp).toLocaleString('pt-BR')}
-                                        </p>
-                                    </div>
-                                    {!notification.read && <div className="w-2.5 h-2.5 bg-blue-500 rounded-full self-center flex-shrink-0"></div>}
-                                </button>
-                            </li>
-                        );
-                    })
-                ) : (
-                    <li className={`p-4 text-center text-sm ${theme.subtleText}`}>
-                        Nenhuma notificação ainda.
-                    </li>
-                )}
-            </ul>
-        </div>
-    );
-};
-
-
-// --- HEADER COMPONENT --- //
 
 interface HeaderProps {
     currentUser: User;
+    onSearch: (query: string) => void;
     onNavigate: (page: CurrentPage) => void;
     onViewProfile: (userId: string) => void;
-    allUsers: User[];
     onLogout: () => void;
     theme: { [key: string]: string };
-    notifications: Notification[];
-    users: { [key: string]: User };
-    onMarkAsRead: (notificationId: number, callback?: () => void) => void;
-    onMarkAllAsRead: () => void;
+    onToggleChatbot: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ currentUser, onNavigate, onViewProfile, allUsers, onLogout, theme, notifications, users, onMarkAsRead, onMarkAllAsRead }) => {
-    const [searchTerm, setSearchTerm] = useState('');
-    const [searchResults, setSearchResults] = useState<User[]>([]);
-    const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-    const notificationsRef = useRef<HTMLDivElement>(null);
-    
-    const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
+const Header: React.FC<HeaderProps> = ({ currentUser, onSearch, onNavigate, onViewProfile, onLogout, theme, onToggleChatbot }) => {
+    const [searchQuery, setSearchQuery] = useState('');
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (isNotificationsOpen && notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
-                setIsNotificationsOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [isNotificationsOpen]);
-
-    const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const term = e.target.value;
-        setSearchTerm(term);
-
-        if (term.trim()) {
-            const lowercasedTerm = term.toLowerCase();
-            const results = allUsers.filter(user =>
-                (user.name.toLowerCase().includes(lowercasedTerm) || user.city.toLowerCase().includes(lowercasedTerm)) 
-                && user.id !== currentUser.id
-            );
-            setSearchResults(results);
-        } else {
-            setSearchResults([]);
+    const handleSearchSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (searchQuery.trim()) {
+            onSearch(searchQuery);
         }
     };
 
-    const handleProfileClick = (userId: string) => {
-        setSearchTerm('');
-        setSearchResults([]);
-        onViewProfile(userId);
-    };
-    
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setIsMenuOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, []);
+
+    const NavButton: React.FC<{ label: string; page: CurrentPage; icon: React.ReactNode }> = ({ label, page, icon }) => (
+        <button onClick={() => onNavigate(page)} className="flex flex-col items-center space-y-1 text-xs font-medium hover:text-white/80 transition-colors">
+            {icon}
+            <span>{label}</span>
+        </button>
+    );
+
     return (
         <header className={`${theme.header} ${theme.headerText} shadow-md`}>
-            <div className="container mx-auto px-4 py-2 flex justify-between items-center">
-                <button onClick={() => onNavigate('profile')} className="text-2xl font-bold">OldKut</button>
-                
-                <div className="relative flex-grow max-w-lg mx-4">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <SearchIcon className="h-5 w-5 text-gray-500" />
-                    </div>
-                    <input
-                        type="text"
-                        placeholder="Pesquisar no OldKut..."
-                        value={searchTerm}
-                        onChange={handleSearchChange}
-                        onFocus={() => setIsNotificationsOpen(false)}
-                        className={`block w-full ${theme.inputBg} ${theme.text} rounded-md py-1.5 pl-10 pr-3 focus:outline-none focus:ring-2 focus:ring-white`}
-                    />
-                    {searchResults.length > 0 && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-10 max-h-60 overflow-y-auto">
-                            <ul>
-                                {searchResults.map(user => (
-                                    <li key={user.id}>
-                                        <button onClick={() => handleProfileClick(user.id)} className="w-full text-left flex items-center space-x-3 p-2 hover:bg-gray-100">
-                                            <img src={user.avatarUrl} alt={user.name} className="w-8 h-8 rounded-sm" />
-                                            <span className="text-sm text-gray-800">{user.name}</span>
-                                        </button>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                    )}
+            <div className="max-w-7xl mx-auto px-4 flex items-center justify-between h-16">
+                {/* Logo and Search */}
+                <div className="flex items-center space-x-6">
+                    <button onClick={() => onNavigate('posts')} className="text-3xl font-bold" style={{fontFamily: "'Arial Black', Gadget, sans-serif"}}>
+                        OldKut
+                    </button>
+                    <form onSubmit={handleSearchSubmit} className="hidden md:flex items-center relative">
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Pesquisar no OldKut"
+                            className="bg-white/20 placeholder-white/60 rounded-full py-1.5 px-4 w-64 text-sm focus:outline-none focus:ring-2 focus:ring-white/50"
+                        />
+                        <button type="submit" className="absolute right-3">
+                            <SearchIcon className="w-5 h-5 text-white/80" />
+                        </button>
+                    </form>
                 </div>
 
-                <div className="flex items-center">
-                    <nav className="flex items-center space-x-6">
-                        <button onClick={() => onNavigate('friends')} className="hover:opacity-80">
-                            Amigos
+                {/* Main Navigation */}
+                <nav className="hidden md:flex items-center space-x-6">
+                    <NavButton label="Início" page="posts" icon={<NewspaperIcon className="w-6 h-6" />} />
+                    <NavButton label="Perfil" page="profile" icon={<UserIcon className="w-6 h-6" />} />
+                    <NavButton label="Comunidades" page="communities" icon={<GroupIcon className="w-6 h-6" />} />
+                </nav>
+
+                {/* User Actions & Menu */}
+                <div className="flex items-center space-x-4">
+                    <button onClick={onToggleChatbot} title="OldKut Assistente" className="hover:bg-white/20 p-2 rounded-full transition-colors">
+                        <SparklesIcon className="w-6 h-6" />
+                    </button>
+                    <button title="Recados" onClick={() => onViewProfile(currentUser.id, { initialTab: 'scraps' })} className="hover:bg-white/20 p-2 rounded-full transition-colors">
+                        <MessageIcon className="w-6 h-6" />
+                    </button>
+                     <button title="Notificações (Em breve)" className="hover:bg-white/20 p-2 rounded-full transition-colors cursor-not-allowed">
+                        <BellIcon className="w-6 h-6" />
+                    </button>
+                    
+                    <div className="relative" ref={menuRef}>
+                        <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="flex items-center space-x-2">
+                            <img src={currentUser.avatarUrl} alt={currentUser.name} className="w-9 h-9 rounded-full border-2 border-white/50" />
+                            <span className="hidden lg:block text-sm font-semibold">{currentUser.name.split(' ')[0]}</span>
                         </button>
-                         <div ref={notificationsRef} className="relative">
-                            <button
-                                onClick={() => setIsNotificationsOpen(prev => !prev)}
-                                className="relative hover:opacity-80"
-                                aria-label={`${unreadCount} unread notifications`}
-                            >
-                                <BellIcon className="w-6 h-6" />
-                                {unreadCount > 0 && (
-                                    <span className={`absolute -top-1 -right-2 bg-red-600 text-white text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center border-2 ${theme.header}`}>
-                                        {unreadCount}
-                                    </span>
-                                )}
-                            </button>
-                            {isNotificationsOpen && (
-                                <NotificationsPanel
-                                    notifications={notifications}
-                                    users={users}
-                                    onClose={() => setIsNotificationsOpen(false)}
-                                    onMarkAsRead={onMarkAsRead}
-                                    onMarkAllAsRead={onMarkAllAsRead}
-                                    onNavigate={onNavigate}
-                                    onViewProfile={onViewProfile}
-                                    theme={theme}
-                                />
-                            )}
-                        </div>
-                    </nav>
-                    <div className="flex items-center space-x-4 ml-6">
-                        <div className="flex items-center space-x-2">
-                            <img src={currentUser.avatarUrl} alt={currentUser.name} className="w-6 h-6 rounded-full" />
-                            <span className="text-sm">{currentUser.name}</span>
-                        </div>
-                        <button onClick={onLogout} className="text-xs opacity-70 hover:underline">Sair</button>
+                        {isMenuOpen && (
+                            <div className={`absolute right-0 mt-2 w-48 ${theme.panelBg} rounded-md shadow-lg border ${theme.panelBorder} z-50`}>
+                                <div className="py-1">
+                                    <button onClick={() => { onViewProfile(currentUser.id); setIsMenuOpen(false); }} className={`w-full text-left flex items-center px-4 py-2 text-sm ${theme.text} ${theme.subtleBgHover}`}>
+                                        <UserIcon className={`w-4 h-4 mr-2 ${theme.subtleText}`} />
+                                        Meu Perfil
+                                    </button>
+                                     <button onClick={() => { onNavigate('settings'); setIsMenuOpen(false); }} className={`w-full text-left flex items-center px-4 py-2 text-sm ${theme.text} ${theme.subtleBgHover}`}>
+                                        <SettingsIcon className={`w-4 h-4 mr-2 ${theme.subtleText}`} />
+                                        Configurações
+                                    </button>
+                                    <div className={`border-t my-1 ${theme.panelBorder}`}></div>
+                                    <button onClick={onLogout} className={`w-full text-left px-4 py-2 text-sm ${theme.text} ${theme.subtleBgHover}`}>
+                                        Sair
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

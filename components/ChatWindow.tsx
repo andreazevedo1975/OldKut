@@ -1,6 +1,60 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { User, ChatMessage } from '../types';
+import type { User, ChatMessage, LinkPreviewData } from '../types';
 import { XIcon } from './icons';
+
+// A regex to find URLs in text content.
+const URL_REGEX_DISPLAY = /https?:\/\/[^\s/$.?#].[^\s]*/gi;
+
+/**
+ * A utility function that parses a string and returns React elements
+ * with any found URLs wrapped in an anchor `<a>` tag.
+ */
+const renderTextWithLinks = (text: string, linkClassName: string) => {
+    const parts = text.split(URL_REGEX_DISPLAY);
+    const links = text.match(URL_REGEX_DISPLAY) || [];
+    
+    return React.createElement(
+        'span',
+        null, // no props for the container span
+        parts.map((part, index) => {
+            const link = links[index];
+            return [
+                part, // The text part
+                link ? React.createElement('a', {
+                    href: link,
+                    target: '_blank',
+                    rel: 'noopener noreferrer', // Security best practice
+                    className: linkClassName,
+                    key: link + index,
+                    onClick: (e) => e.stopPropagation() // Prevent click bubbling
+                }, link) : null
+            ];
+        })
+    );
+};
+
+/**
+ * A component to display a compact preview card for a URL inside a chat bubble.
+ */
+const LinkPreviewCard: React.FC<{ data: LinkPreviewData, theme: { [key: string]: string }, isSentByMe: boolean }> = ({ data, theme, isSentByMe }) => (
+    <a
+        href={data.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`mt-2 block border ${isSentByMe ? 'border-blue-400' : theme.panelBorder} rounded-lg overflow-hidden bg-white/20 hover:bg-white/30 no-underline`}
+    >
+        {data.image && (
+             <div className="max-h-24 overflow-hidden bg-gray-200">
+                <img src={data.image} alt={data.title} className="w-full h-auto object-cover" />
+            </div>
+        )}
+        <div className="p-2">
+            <h4 className={`font-bold text-xs leading-tight ${isSentByMe ? 'text-white' : theme.text}`}>{data.title}</h4>
+            <p className={`text-xs ${isSentByMe ? 'text-blue-100' : theme.subtleText} mt-1 line-clamp-2`}>{data.description}</p>
+        </div>
+    </a>
+);
+
 
 interface ChatWindowProps {
     currentUser: User;
@@ -78,12 +132,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, friend, messages, 
             </header>
             
             <div className="flex-1 p-2 overflow-y-auto flex flex-col space-y-2">
-                {messages.map((msg, index) => {
+                {messages.map((msg) => {
                     const isSentByMe = msg.senderId === currentUser.id;
+                    const linkClassName = isSentByMe ? 'underline font-semibold' : `${theme.link} underline`;
                     return (
                         <div key={msg.id} className={`flex ${isSentByMe ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-[80%] p-2 rounded-lg ${isSentByMe ? 'bg-blue-500 text-white' : theme.subtleBg}`}>
-                                <p className={`text-sm ${isSentByMe ? '' : theme.text}`}>{msg.content}</p>
+                            <div className={`max-w-[85%] p-2 rounded-lg ${isSentByMe ? 'bg-blue-500 text-white' : theme.subtleBg}`}>
+                                <div className={`text-sm ${isSentByMe ? '' : theme.text} whitespace-pre-wrap break-words`}>
+                                    {renderTextWithLinks(msg.content, linkClassName)}
+                                </div>
+                                {msg.linkPreview && <LinkPreviewCard data={msg.linkPreview} theme={theme} isSentByMe={isSentByMe} />}
                             </div>
                         </div>
                     );

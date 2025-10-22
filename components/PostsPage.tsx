@@ -1,7 +1,63 @@
 
+
 import React, { useState } from 'react';
-import type { Post, User, PostComment } from '../types';
+import type { Post, User, PostComment, LinkPreviewData } from '../types';
 import { HeartIcon, MessageIcon } from './icons';
+
+// A regex to find URLs in text content.
+const URL_REGEX_DISPLAY = /https?:\/\/[^\s/$.?#].[^\s]*/gi;
+
+/**
+ * A utility function that parses a string and returns React elements
+ * with any found URLs wrapped in an anchor `<a>` tag.
+ */
+const renderTextWithLinks = (text: string, linkClassName: string) => {
+    const parts = text.split(URL_REGEX_DISPLAY);
+    const links = text.match(URL_REGEX_DISPLAY) || [];
+    
+    // We use React.createElement to avoid JSX syntax issues in a plain function
+    return React.createElement(
+        'span',
+        null, // no props for the container span
+        parts.map((part, index) => {
+            const link = links[index];
+            return [
+                part, // The text part
+                // If a link exists at this position, create an <a> element for it
+                link ? React.createElement('a', {
+                    href: link,
+                    target: '_blank',
+                    rel: 'noopener noreferrer', // Security best practice for external links
+                    className: linkClassName,
+                    key: link + index,
+                    onClick: (e) => e.stopPropagation() // Prevent post clicks
+                }, link) : null
+            ];
+        })
+    );
+};
+
+/**
+ * A component to display a preview card for a URL.
+ */
+const LinkPreviewCard: React.FC<{ data: LinkPreviewData, theme: { [key: string]: string } }> = ({ data, theme }) => (
+    <a
+        href={data.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`mt-2 flex border ${theme.panelBorder} rounded-lg overflow-hidden ${theme.subtleBgHover} no-underline`}
+    >
+        <div className="flex-shrink-0 w-24 sm:w-32 bg-gray-200">
+             <img src={data.image} alt={data.title} className="w-full h-full object-cover" />
+        </div>
+        <div className="p-3 flex flex-col justify-center">
+            <h4 className={`font-bold text-sm leading-tight ${theme.text}`}>{data.title}</h4>
+            <p className={`text-xs ${theme.subtleText} mt-1 line-clamp-2`}>{data.description}</p>
+            <p className={`text-xs text-gray-500 mt-2 truncate`}>{data.url}</p>
+        </div>
+    </a>
+);
+
 
 interface PostsPageProps {
     posts: Post[];
@@ -97,7 +153,12 @@ const PostCard: React.FC<{
             </div>
 
             {/* Post Content */}
-            <p className={`${theme.text} whitespace-pre-wrap`}>{post.content}</p>
+            <div className={`${theme.text} whitespace-pre-wrap`}>
+                {renderTextWithLinks(post.content, `${theme.link} hover:underline`)}
+            </div>
+
+            {/* Link Preview */}
+            {post.linkPreview && <LinkPreviewCard data={post.linkPreview} theme={theme} />}
 
             {/* Post Actions */}
             <div className={`flex items-center space-x-6 mt-3 pt-2 border-t ${theme.panelBorder}`}>

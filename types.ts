@@ -45,6 +45,14 @@ export interface Community {
   name: string;
   imageUrl: string;
   members: number;
+  theme: string;
+}
+
+export interface LinkPreviewData {
+  url: string;
+  title: string;
+  description: string;
+  image: string;
 }
 
 export interface ChatMessage {
@@ -54,6 +62,7 @@ export interface ChatMessage {
     content: string;
     timestamp: string; // ISO String
     read: boolean;
+    linkPreview?: LinkPreviewData | null;
 }
 
 export interface PostComment {
@@ -70,6 +79,7 @@ export interface Post {
   timestamp: string; // ISO string or relative time string
   likedByIds: string[];
   comments: PostComment[];
+  linkPreview?: LinkPreviewData | null;
 }
 
 export interface ProfileVisit {
@@ -86,4 +96,35 @@ export interface Notification {
   targetId?: number; // e.g., post_id
   read: boolean;
   timestamp: string;
+}
+
+export interface Photo {
+  id: string;
+  url: string;
+  name: string;
+  uploadDate: string; // ISO String
+}
+
+export interface Album {
+  id: string;
+  name: string;
+  photos: Photo[];
+}
+
+export interface Video {
+  id: string;
+  url: string;
+  thumbnailUrl: string;
+  subtitle?: {
+    url: string;
+    name: string;
+  };
+  name: string;
+  uploadDate: string; // ISO String
+}
+
+export interface Playlist {
+  id: string;
+  name: string;
+  videos: Video[];
 }

@@ -1,13 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import type { Community } from '../types';
-import { CheckCircleIcon, SearchIcon } from './icons';
+import { THEMES } from '../App';
+import { SearchIcon } from './icons';
 
 interface CommunitiesPageProps {
     allCommunities: Community[];
     userCommunities: number[];
     onToggleCommunity: (communityId: number) => void;
     onViewCommunity: (communityId: number) => void;
-    onCreateCommunity: (name: string, imageUrl: string) => void;
+    onCreateCommunity: (name: string, imageUrl: string, theme: string) => void;
     theme: { [key: string]: string };
 }
 
@@ -15,16 +16,18 @@ const CommunitiesPage: React.FC<CommunitiesPageProps> = ({ allCommunities, userC
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [newCommunityName, setNewCommunityName] = useState('');
     const [newCommunityImageUrl, setNewCommunityImageUrl] = useState('');
+    const [newCommunityTheme, setNewCommunityTheme] = useState('classic');
     const [filterTerm, setFilterTerm] = useState('');
     const [sortOption, setSortOption] = useState('members-desc'); // e.g., 'members-desc', 'name-asc'
 
     const handleCreateSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (newCommunityName.trim()) {
-            onCreateCommunity(newCommunityName.trim(), newCommunityImageUrl.trim());
+            onCreateCommunity(newCommunityName.trim(), newCommunityImageUrl.trim(), newCommunityTheme);
             setIsCreateModalOpen(false);
             setNewCommunityName('');
             setNewCommunityImageUrl('');
+            setNewCommunityTheme('classic');
         }
     };
 
@@ -164,6 +167,25 @@ const CommunitiesPage: React.FC<CommunitiesPageProps> = ({ allCommunities, userC
                                         className={`w-full p-2 border ${theme.panelBorder} rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-pink-500 ${theme.inputBg} ${theme.text}`}
                                         placeholder="https://exemplo.com/imagem.png"
                                     />
+                                </div>
+                                <div>
+                                    <label className={`block text-sm font-medium ${theme.subtleText} mb-2`}>Tema da Comunidade:</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {Object.entries({classic: 'Azul', pink: 'Rosa', green: 'Verde', dark: 'Escuro'}).map(([key, name]) => (
+                                            <button
+                                                key={key}
+                                                type="button"
+                                                onClick={() => setNewCommunityTheme(key)}
+                                                className={`flex items-center space-x-2 p-2 rounded-md border-2 transition-all text-xs ${newCommunityTheme === key ? 'border-pink-500 bg-pink-50' : `border-transparent ${theme.subtleBg}`}`}
+                                            >
+                                                <div className="flex -space-x-1 border border-gray-300 rounded-full p-0.5">
+                                                    <span className={`block w-4 h-4 rounded-full ${THEMES[key].bg} border border-white`}></span>
+                                                    <span className={`block w-4 h-4 rounded-full ${THEMES[key].header} border border-white`}></span>
+                                                </div>
+                                                <span className={`font-semibold ${theme.text}`}>{name}</span>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                             <div className="flex justify-end space-x-3 mt-6">

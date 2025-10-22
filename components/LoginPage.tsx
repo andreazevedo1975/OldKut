@@ -14,6 +14,8 @@ const LoginPage: React.FC<LoginPageProps> = () => {
     // Login state
     const [loginEmail, setLoginEmail] = useState('');
     const [loginPassword, setLoginPassword] = useState('');
+    const [loginView, setLoginView] = useState<'form' | 'forgot' | 'success'>('form');
+    const [forgotEmail, setForgotEmail] = useState('');
 
     // Signup state
     const [signupStep, setSignupStep] = useState<'form' | 'customize'>('form');
@@ -71,6 +73,21 @@ const LoginPage: React.FC<LoginPageProps> = () => {
         setLoading(false);
     };
 
+    const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError(null);
+        const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+            redirectTo: window.location.origin, // Redirect user back to the app after reset
+        });
+        if (error) {
+            setError(error.message);
+        } else {
+            setLoginView('success');
+        }
+        setLoading(false);
+    };
+
     const handleSignupSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (isSignupDisabled) return;
@@ -122,6 +139,7 @@ const LoginPage: React.FC<LoginPageProps> = () => {
                 setActiveTab(tabName);
                 setError(null);
                 setSignupStep('form');
+                setLoginView('form');
             }}
             className={`w-1/2 py-2 text-center font-bold text-sm rounded-t-md ${activeTab === tabName ? 'bg-white text-[#ED008C]' : 'bg-gray-200 text-gray-600'}`}
         >
@@ -160,19 +178,86 @@ const LoginPage: React.FC<LoginPageProps> = () => {
                          {error && <p className="bg-red-100 text-red-700 p-3 rounded-md text-sm mb-4">{error}</p>}
 
                         {activeTab === 'login' && (
-                            <form onSubmit={handleLoginSubmit} className="space-y-4">
-                                <div>
-                                    <label className="text-sm text-gray-600">Email</label>
-                                    <input type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} required className="w-full p-2 border border-gray-300 rounded-md" />
-                                </div>
-                                <div>
-                                    <label className="text-sm text-gray-600">Senha</label>
-                                    <input type="password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} required className="w-full p-2 border border-gray-300 rounded-md" />
-                                </div>
-                                <button type="submit" disabled={loading} className="w-full bg-[#ED008C] text-white font-bold py-2 px-4 rounded-md hover:bg-[#D4007C] disabled:bg-gray-400">
-                                    {loading ? 'Entrando...' : 'Entrar'}
-                                </button>
-                            </form>
+                            <>
+                                {loginView === 'form' && (
+                                    <form onSubmit={handleLoginSubmit} className="space-y-4">
+                                        <div>
+                                            <label className="text-sm text-gray-600">Email</label>
+                                            <input type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} required className="w-full p-2 border border-gray-300 rounded-md" />
+                                        </div>
+                                        <div>
+                                            <div className="flex justify-between items-baseline">
+                                                <label className="text-sm text-gray-600">Senha</label>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setLoginView('forgot')}
+                                                    className="text-xs text-gray-600 hover:underline"
+                                                >
+                                                    Esqueceu a senha?
+                                                </button>
+                                            </div>
+                                            <input type="password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} required className="w-full p-2 border border-gray-300 rounded-md" />
+                                        </div>
+                                        <button type="submit" disabled={loading} className="w-full bg-[#ED008C] text-white font-bold py-2 px-4 rounded-md hover:bg-[#D4007C] disabled:bg-gray-400">
+                                            {loading ? 'Entrando...' : 'Entrar'}
+                                        </button>
+                                    </form>
+                                )}
+                                {loginView === 'forgot' && (
+                                    <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
+                                        <h2 className="text-xl text-gray-700 mb-2">Recuperar Senha</h2>
+                                        <p className="text-sm text-gray-600">
+                                            Digite seu email abaixo e enviaremos um link para redefinir sua senha.
+                                        </p>
+                                        <div>
+                                            <label className="text-sm text-gray-600">Email</label>
+                                            <input 
+                                                type="email" 
+                                                value={forgotEmail} 
+                                                onChange={e => setForgotEmail(e.target.value)} 
+                                                required 
+                                                className="w-full p-2 border border-gray-300 rounded-md" 
+                                                placeholder="seu.email@exemplo.com"
+                                                autoFocus
+                                            />
+                                        </div>
+                                        <button 
+                                            type="submit" 
+                                            disabled={loading} 
+                                            className="w-full bg-[#ED008C] text-white font-bold py-2 px-4 rounded-md hover:bg-[#D4007C] disabled:bg-gray-400"
+                                        >
+                                            {loading ? 'Enviando...' : 'Enviar Link de Recuperação'}
+                                        </button>
+                                        <div className="text-center">
+                                            <button
+                                                type="button"
+                                                onClick={() => setLoginView('form')}
+                                                className="text-sm text-gray-600 hover:underline"
+                                            >
+                                                &larr; Voltar para o login
+                                            </button>
+                                        </div>
+                                    </form>
+                                )}
+                                 {loginView === 'success' && (
+                                    <div className="text-center space-y-4">
+                                        <h2 className="text-xl text-green-600 font-semibold">Verifique seu Email!</h2>
+                                        <p className="text-sm text-gray-600">
+                                            Se uma conta com o email <span className="font-bold">{forgotEmail}</span> existir, um email foi enviado com instruções para redefinir sua senha.
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setLoginView('form');
+                                                setForgotEmail('');
+                                            }}
+                                            className="w-full bg-[#ED008C] text-white font-bold py-2 px-4 rounded-md hover:bg-[#D4007C]"
+                                        >
+                                            Voltar para o Login
+                                        </button>
+                                    </div>
+                                )}
+                            </>
                         )}
                         {activeTab === 'signup' && (
                             signupStep === 'form' ? (
