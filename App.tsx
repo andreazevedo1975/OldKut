@@ -1,10 +1,11 @@
 
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './supabaseClient';
 
 // Import types
-import type { User, Scrap, Testimonial, Community, Post, ChatMessage, Album, Photo, Video, Playlist, ProfileVisit, LinkPreviewData } from './types';
+import type { User, Scrap, Testimonial, Community, Post, ChatMessage, Album, Photo, Video, Playlist, ProfileVisit, LinkPreviewData, Notification } from './types';
 
 // Import components
 import Header from './components/Header';
@@ -23,7 +24,7 @@ import ChatSidebar from './components/ChatSidebar';
 import ChatWindow from './components/ChatWindow';
 import Chatbot from './components/Chatbot';
 
-import { MOCK_USERS, MOCK_SCRAPS, MOCK_TESTIMONIALS, MOCK_COMMUNITIES, MOCK_POSTS, MOCK_CHAT_MESSAGES, MOCK_ALBUMS, MOCK_PLAYLISTS, MOCK_PROFILE_VISITS } from './mockData';
+import { MOCK_USERS, MOCK_SCRAPS, MOCK_TESTIMONIALS, MOCK_COMMUNITIES, MOCK_POSTS, MOCK_CHAT_MESSAGES, MOCK_ALBUMS, MOCK_PLAYLISTS, MOCK_PROFILE_VISITS, MOCK_NOTIFICATIONS } from './mockData';
 
 // Fix: Export types and constants to be used across the application. This resolves module import errors in other components.
 export type CurrentPage = 'login' | 'profile' | 'posts' | 'friends' | 'communities' | 'communityDetail' | 'photos' | 'videos' | 'settings' | 'search';
@@ -107,7 +108,7 @@ const fetchLinkPreview = async (url: string): Promise<LinkPreviewData | null> =>
                 url,
                 title: 'YouTube: Build a Fullstack App with...',
                 description: 'In this tutorial, you will learn how to build a modern full-stack application from scratch using the most popular technologies.',
-                image: 'https://picsum.photos/seed/youtube/400/300'
+                image: `https://picsum.photos/seed/youtube/400/300`
             };
         }
         return {
@@ -139,6 +140,7 @@ const App: React.FC = () => {
     const [albums, setAlbums] = useState<Album[]>(MOCK_ALBUMS);
     const [playlists, setPlaylists] = useState<Playlist[]>(MOCK_PLAYLISTS);
     const [profileVisits, setProfileVisits] = useState<ProfileVisit[]>(MOCK_PROFILE_VISITS);
+    const [notifications, setNotifications] = useState<Notification[]>(MOCK_NOTIFICATIONS);
 
     // Page-specific state
     const [viewedUserId, setViewedUserId] = useState<string | null>(null);
@@ -219,7 +221,7 @@ const App: React.FC = () => {
         }
     }, [currentUser, handleViewProfile]);
 
-    const handleAddPost = useCallback(async (content: string) => {
+    const handleAddPost = useCallback(async (content: string, imageUrls: string[]) => {
         if (!currentUser) return;
         const newPost: Post = {
             id: Date.now(),
@@ -228,7 +230,8 @@ const App: React.FC = () => {
             timestamp: new Date().toISOString(),
             likedByIds: [],
             comments: [],
-            linkPreview: null
+            linkPreview: null,
+            imageUrls: imageUrls
         };
         const urlMatch = content.match(URL_REGEX);
         if(urlMatch) {
@@ -240,22 +243,45 @@ const App: React.FC = () => {
 
     const handleToggleLike = useCallback((postId: number) => {
         if (!currentUser) return;
+        
+        const post = posts.find(p => p.id === postId);
+        if (!post) return;
+        
+        const isLikedByCurrentUser = post.likedByIds.includes(currentUser.id);
+
         setPosts(posts => posts.map(p => {
             if (p.id === postId) {
-                const isLiked = p.likedByIds.includes(currentUser.id);
                 return {
                     ...p,
-                    likedByIds: isLiked
+                    likedByIds: isLikedByCurrentUser
                         ? p.likedByIds.filter(id => id !== currentUser.id)
                         : [...p.likedByIds, currentUser.id]
                 };
             }
             return p;
         }));
-    }, [currentUser]);
+        
+        // Create a notification if the user is liking (not unliking) someone else's post
+        if (!isLikedByCurrentUser && post.authorId !== currentUser.id) {
+            const newNotification: Notification = {
+                id: Date.now(),
+                recipientId: post.authorId,
+                actorId: currentUser.id,
+                type: 'new_like',
+                targetId: postId,
+                read: false,
+                timestamp: new Date().toISOString(),
+            };
+            setNotifications(prev => [newNotification, ...prev]);
+        }
+    }, [currentUser, posts]);
 
     const handleAddComment = useCallback((postId: number, content: string) => {
         if (!currentUser) return;
+
+        const post = posts.find(p => p.id === postId);
+        if (!post) return;
+
         setPosts(posts => posts.map(p => {
             if (p.id === postId) {
                 const newComment = {
@@ -268,7 +294,41 @@ const App: React.FC = () => {
             }
             return p;
         }));
+
+        // Create a notification if commenting on someone else's post
+        if (post.authorId !== currentUser.id) {
+            const newNotification: Notification = {
+                id: Date.now(),
+                recipientId: post.authorId,
+                actorId: currentUser.id,
+                type: 'new_comment',
+                targetId: postId,
+                read: false,
+                timestamp: new Date().toISOString(),
+            };
+            setNotifications(prev => [newNotification, ...prev]);
+        }
+    }, [currentUser, posts]);
+    
+    const handleMarkNotificationsRead = useCallback(() => {
+        if (!currentUser) return;
+        setNotifications(prev => prev.map(n => 
+            n.recipientId === currentUser.id && !n.read ? { ...n, read: true } : n
+        ));
     }, [currentUser]);
+
+    const handleUnblockUser = useCallback((userIdToUnblock: string) => {
+        if (!currentUser) return;
+        setCurrentUser(u => ({...u!, blockedUserIds: u!.blockedUserIds.filter(id => id !== userIdToUnblock)}));
+    }, [currentUser]);
+
+    const handleEditAlbumName = useCallback((albumId: string, newName: string) => {
+        setAlbums(prev => prev.map(a => a.id === albumId ? { ...a, name: newName } : a));
+    }, []);
+
+    const handleEditPlaylistName = useCallback((playlistId: string, newName: string) => {
+        setPlaylists(prev => prev.map(p => p.id === playlistId ? { ...p, name: newName } : p));
+    }, []);
     
     // --- Render Logic ---
     if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
@@ -310,7 +370,7 @@ const App: React.FC = () => {
                         setUsers(prev => ({...prev, [recipientId]: {...prev[recipientId], friendRequests: [...prev[recipientId].friendRequests, currentUser.id]}}));
                     }}
                     onBlockUser={(userId) => setCurrentUser(u => ({...u!, blockedUserIds: [...u!.blockedUserIds, userId]}))}
-                    onUnblockUser={(userId) => setCurrentUser(u => ({...u!, blockedUserIds: u!.blockedUserIds.filter(id => id !== userId)}))}
+                    onUnblockUser={handleUnblockUser}
                     theme={currentTheme}
                     initialProfileTab={initialProfileTab}
                     onClearInitialTab={() => setInitialProfileTab(null)}
@@ -369,7 +429,6 @@ const App: React.FC = () => {
                         setCommunities(prev => prev.map(c => c.id === id ? {...c, members: isMember ? c.members-1 : c.members+1} : c));
                     }}
                     onNavigate={handleNavigate}
-                    onViewProfile={handleViewProfile}
                  />;
             case 'photos':
                 return <PhotosPage 
@@ -378,19 +437,27 @@ const App: React.FC = () => {
                     onCreateAlbum={(name) => setAlbums(prev => [{id: `album-${Date.now()}`, name, photos:[]}, ...prev])}
                     onAddPhotos={(albumId, photos) => setAlbums(prev => prev.map(a => a.id === albumId ? {...a, photos: [...a.photos, ...photos]} : a))}
                     onDeletePhoto={(albumId, photoId) => setAlbums(prev => prev.map(a => a.id === albumId ? {...a, photos: a.photos.filter(p => p.id !== photoId)}: a))}
+                    onEditAlbumName={handleEditAlbumName}
                 />;
             case 'videos':
                  return <VideosPage 
                     theme={currentTheme}
-                    currentUser={currentUser}
                     playlists={playlists}
                     onCreatePlaylist={(name) => setPlaylists(prev => [{id: `playlist-${Date.now()}`, name, videos:[]}, ...prev])}
                     onAddVideos={(playlistId, videos) => setPlaylists(prev => prev.map(p => p.id === playlistId ? {...p, videos: [...p.videos, ...videos]} : p))}
                     onDeleteVideo={(playlistId, videoId) => setPlaylists(prev => prev.map(p => p.id === playlistId ? {...p, videos: p.videos.filter(v => v.id !== videoId)} : p))}
                     onUpdateVideo={(playlistId, video) => setPlaylists(prev => prev.map(p => p.id === playlistId ? {...p, videos: p.videos.map(v => v.id === video.id ? video : v)} : p))}
+                    onEditPlaylistName={handleEditPlaylistName}
                  />;
             case 'settings':
-                return <SettingsPage currentUser={currentUser} onUpdateProfile={handleUpdateProfile} onCancel={() => handleViewProfile(currentUser.id)} theme={currentTheme}/>;
+                return <SettingsPage 
+                    currentUser={currentUser} 
+                    onUpdateProfile={handleUpdateProfile} 
+                    onCancel={() => handleViewProfile(currentUser.id)} 
+                    theme={currentTheme}
+                    blockedUsers={currentUser.blockedUserIds.map(id => users[id]).filter(Boolean)}
+                    onUnblockUser={handleUnblockUser}
+                />;
             case 'search':
                 return <SearchPage 
                     query={searchQuery}
@@ -418,6 +485,9 @@ const App: React.FC = () => {
                 onLogout={handleLogout}
                 theme={currentTheme}
                 onToggleChatbot={() => setIsChatbotOpen(p => !p)}
+                notifications={notifications}
+                users={users}
+                onMarkNotificationsRead={handleMarkNotificationsRead}
             />
             <main className="max-w-7xl mx-auto px-4 py-6 flex gap-6">
                 <ProfileSidebar

@@ -1,15 +1,17 @@
+
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import type { Playlist, Video, User } from '../types';
-import { FolderPlusIcon, ArrowUpTrayIcon, TrashIcon, VideoIcon, PlayIcon, SubtitleIcon, ImageIcon, SearchIcon } from './icons';
+import type { Playlist, Video } from '../types';
+import { FolderPlusIcon, ArrowUpTrayIcon, TrashIcon, VideoIcon, PlayIcon, SubtitleIcon, ImageIcon, SearchIcon, PencilIcon } from './icons';
 
 interface VideosPageProps {
     theme: { [key:string]: string };
-    currentUser: User;
     playlists: Playlist[];
     onCreatePlaylist: (name: string) => void;
     onAddVideos: (playlistId: string, videos: Video[]) => void;
     onDeleteVideo: (playlistId: string, videoId: string) => void;
     onUpdateVideo: (playlistId: string, video: Video) => void;
+    onEditPlaylistName: (playlistId: string, newName: string) => void;
 }
 
 type UploadStatus = 'waiting' | 'processing' | 'completed' | 'error';
@@ -49,7 +51,7 @@ const generateVideoThumbnail = (file: File): Promise<string> => {
     });
 };
 
-const VideosPage: React.FC<VideosPageProps> = ({ theme, playlists, onCreatePlaylist, onAddVideos, onDeleteVideo, onUpdateVideo }) => {
+const VideosPage: React.FC<VideosPageProps> = ({ theme, playlists, onCreatePlaylist, onAddVideos, onDeleteVideo, onUpdateVideo, onEditPlaylistName }) => {
     const [view, setView] = useState<'list' | 'playlist'>('list');
     const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -60,6 +62,7 @@ const VideosPage: React.FC<VideosPageProps> = ({ theme, playlists, onCreatePlayl
     const [playingVideo, setPlayingVideo] = useState<Video | null>(null);
     const [filterTerm, setFilterTerm] = useState('');
     const [sortOption, setSortOption] = useState('date-desc');
+    const [editingPlaylist, setEditingPlaylist] = useState<{ id: string; name: string } | null>(null);
     
     const fileInputRef = useRef<HTMLInputElement>(null);
     const createdObjectURLs = useRef<string[]>([]);
@@ -131,6 +134,13 @@ const VideosPage: React.FC<VideosPageProps> = ({ theme, playlists, onCreatePlayl
             setNewPlaylistName('');
         }
     };
+    
+    const handleSavePlaylistName = () => {
+        if(editingPlaylist && editingPlaylist.name.trim()) {
+            onEditPlaylistName(editingPlaylist.id, editingPlaylist.name.trim());
+        }
+        setEditingPlaylist(null);
+    };
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files || []);
@@ -143,8 +153,9 @@ const VideosPage: React.FC<VideosPageProps> = ({ theme, playlists, onCreatePlayl
     const confirmDelete = () => {
         if (videoToDelete && selectedPlaylistId) {
             onDeleteVideo(selectedPlaylistId, videoToDelete.id);
+            // Fix: Revoke all associated object URLs to prevent memory leaks.
             [videoToDelete.url, videoToDelete.thumbnailUrl, videoToDelete.subtitle?.url].forEach(url => {
-                if (url) {
+                if (url && url.startsWith('blob:')) { // Ensure we only revoke blob URLs
                     URL.revokeObjectURL(url);
                      createdObjectURLs.current = createdObjectURLs.current.filter(u => u !== url);
                 }
@@ -157,7 +168,10 @@ const VideosPage: React.FC<VideosPageProps> = ({ theme, playlists, onCreatePlayl
         const file = e.target.files?.[0];
         if (file && selectedPlaylistId) {
             const video = selectedPlaylist?.videos.find(v => v.id === videoId);
-            if(video?.thumbnailUrl) URL.revokeObjectURL(video.thumbnailUrl); // Revoke old one
+            // Fix: Revoke the old thumbnail URL if it's a blob to prevent memory leaks.
+            if(video?.thumbnailUrl && video.thumbnailUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(video.thumbnailUrl);
+            }
 
             const newThumbnailUrl = URL.createObjectURL(file);
             createdObjectURLs.current.push(newThumbnailUrl);
@@ -169,7 +183,10 @@ const VideosPage: React.FC<VideosPageProps> = ({ theme, playlists, onCreatePlayl
         const file = e.target.files?.[0];
         if (file && selectedPlaylistId) {
             const video = selectedPlaylist?.videos.find(v => v.id === videoId);
-            if(video?.subtitle?.url) URL.revokeObjectURL(video.subtitle.url); // Revoke old one
+            // Fix: Revoke the old subtitle URL if it's a blob to prevent memory leaks.
+            if(video?.subtitle?.url && video.subtitle.url.startsWith('blob:')) {
+                URL.revokeObjectURL(video.subtitle.url);
+            }
 
             const newSubtitleUrl = URL.createObjectURL(file);
             createdObjectURLs.current.push(newSubtitleUrl);
@@ -210,13 +227,18 @@ const VideosPage: React.FC<VideosPageProps> = ({ theme, playlists, onCreatePlayl
             {playlists.length > 0 ? (
                 <div className="space-y-3">
                     {playlists.map(p => (
-                        <button key={p.id} onClick={() => { setSelectedPlaylistId(p.id); setView('playlist'); }} className={`w-full text-left flex items-center p-3 rounded-lg border ${theme.panelBorder} ${theme.subtleBgHover} transition-all`}>
-                            <VideoIcon className={`w-10 h-10 mr-4 ${theme.subtleText}`} />
-                            <div className="flex-1">
-                                <p className={`font-bold ${theme.link}`}>{p.name}</p>
-                                <p className={`text-sm ${theme.subtleText}`}>{p.videos.length} vídeo(s)</p>
-                            </div>
-                        </button>
+                        <div key={p.id} className={`flex items-center p-3 rounded-lg border ${theme.panelBorder} ${theme.subtleBgHover} transition-all group`}>
+                            <button onClick={() => { setSelectedPlaylistId(p.id); setView('playlist'); }} className="flex items-center flex-1 text-left">
+                                <VideoIcon className={`w-10 h-10 mr-4 ${theme.subtleText}`} />
+                                <div className="flex-1">
+                                    <p className={`font-bold ${theme.link}`}>{p.name}</p>
+                                    <p className={`text-sm ${theme.subtleText}`}>{p.videos.length} vídeo(s)</p>
+                                </div>
+                            </button>
+                            <button onClick={() => setEditingPlaylist({id: p.id, name: p.name})} className={`p-1 ${theme.subtleText} opacity-0 group-hover:opacity-100 transition-opacity`}>
+                                <PencilIcon className="w-5 h-5" />
+                            </button>
+                        </div>
                     ))}
                 </div>
             ) : (
@@ -236,7 +258,10 @@ const VideosPage: React.FC<VideosPageProps> = ({ theme, playlists, onCreatePlayl
                 <div className="flex justify-between items-start mb-4">
                     <div>
                         <button onClick={() => { setView('list'); setUploadQueue([]); setIsUploading(false); }} className={`text-sm ${theme.link} hover:underline`}>&larr; Voltar para Playlists</button>
-                        <h2 className={`text-2xl font-bold ${theme.text} mt-1`}>{selectedPlaylist.name}</h2>
+                        <div className="flex items-center gap-2 mt-1">
+                            <h2 className={`text-2xl font-bold ${theme.text}`}>{selectedPlaylist.name}</h2>
+                            <button onClick={() => setEditingPlaylist({id: selectedPlaylist.id, name: selectedPlaylist.name})} className={`${theme.subtleText} hover:text-pink-500`}><PencilIcon className="w-5 h-5" /></button>
+                        </div>
                     </div>
                     <div>
                          <button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className={`${theme.button} ${theme.buttonText} font-bold py-1.5 px-4 rounded-md hover:opacity-90 text-sm flex items-center space-x-2 disabled:bg-gray-400 disabled:cursor-wait`}>
@@ -338,6 +363,19 @@ const VideosPage: React.FC<VideosPageProps> = ({ theme, playlists, onCreatePlayl
                                 <button type="submit" className={`${theme.button} ${theme.buttonText} text-sm font-bold py-1.5 px-5 rounded-md hover:opacity-90`}>Criar</button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+            
+             {editingPlaylist && (
+                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className={`${theme.panelBg} p-6 rounded-lg shadow-xl w-full max-w-sm border ${theme.panelBorder}`}>
+                        <h3 className={`text-lg font-bold ${theme.text} mb-4`}>Editar Nome da Playlist</h3>
+                         <input type="text" value={editingPlaylist.name} onChange={(e) => setEditingPlaylist(prev => ({...prev!, name: e.target.value}))} className={`w-full p-2 border ${theme.panelBorder} rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-pink-500 ${theme.inputBg} ${theme.text}`} autoFocus />
+                         <div className="flex justify-end space-x-3 mt-4">
+                            <button type="button" onClick={() => setEditingPlaylist(null)} className="bg-gray-200 text-gray-800 text-sm font-bold py-1.5 px-5 rounded-md hover:bg-gray-300">Cancelar</button>
+                            <button type="button" onClick={handleSavePlaylistName} className={`${theme.button} ${theme.buttonText} text-sm font-bold py-1.5 px-5 rounded-md hover:opacity-90`}>Salvar</button>
+                        </div>
                     </div>
                 </div>
             )}

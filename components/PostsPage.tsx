@@ -1,8 +1,7 @@
 
-
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { Post, User, PostComment, LinkPreviewData } from '../types';
-import { HeartIcon, MessageIcon } from './icons';
+import { HeartIcon, MessageIcon, ImageIcon, XIcon } from './icons';
 
 // A regex to find URLs in text content.
 const URL_REGEX_DISPLAY = /https?:\/\/[^\s/$.?#].[^\s]*/gi;
@@ -12,6 +11,7 @@ const URL_REGEX_DISPLAY = /https?:\/\/[^\s/$.?#].[^\s]*/gi;
  * with any found URLs wrapped in an anchor `<a>` tag.
  */
 const renderTextWithLinks = (text: string, linkClassName: string) => {
+    if (!text) return null;
     const parts = text.split(URL_REGEX_DISPLAY);
     const links = text.match(URL_REGEX_DISPLAY) || [];
     
@@ -63,7 +63,7 @@ interface PostsPageProps {
     posts: Post[];
     users: { [key: string]: User };
     currentUser: User;
-    onAddPost: (content: string) => void;
+    onAddPost: (content: string, imageUrls: string[]) => void;
     onToggleLike: (postId: number) => void;
     onAddComment: (postId: number, content: string) => void;
     onViewProfile: (userId: string) => void;
@@ -75,18 +75,73 @@ interface PostsPageProps {
 
 const PostCreator: React.FC<{
     currentUser: User;
-    onAddPost: (content: string) => void;
+    onAddPost: (content: string, imageUrls: string[]) => void;
     theme: { [key: string]: string };
 }> = ({ currentUser, onAddPost, theme }) => {
     const [content, setContent] = useState('');
+    const [stagedImages, setStagedImages] = useState<string[]>([]);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const createdObjectURLs = useRef<string[]>([]);
+
+    // Fix: Clean up any created object URLs when the component unmounts.
+    useEffect(() => {
+        return () => {
+            createdObjectURLs.current.forEach(URL.revokeObjectURL);
+        };
+    }, []);
+
+    const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        // Fix: Use a standard for-loop and FileList.item() to ensure proper type inference for 'file', resolving the 'unknown' type error.
+        const files = e.target.files;
+        if (!files) {
+            return;
+        }
+
+        const newImageUrls: string[] = [];
+        const limit = Math.min(files.length, 4 - stagedImages.length);
+
+        for (let i = 0; i < limit; i++) {
+            const file = files.item(i);
+            if (file) {
+                const url = URL.createObjectURL(file);
+                createdObjectURLs.current.push(url);
+                newImageUrls.push(url);
+            }
+        }
+
+        if (newImageUrls.length > 0) {
+            setStagedImages(prev => [...prev, ...newImageUrls]);
+        }
+        // Reset file input to allow selecting the same file again
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
+    };
+
+    const handleRemoveStagedImage = (indexToRemove: number) => {
+        const urlToRemove = stagedImages[indexToRemove];
+        // Fix: Revoke the object URL to prevent memory leaks.
+        URL.revokeObjectURL(urlToRemove);
+        createdObjectURLs.current = createdObjectURLs.current.filter(url => url !== urlToRemove);
+        setStagedImages(prev => prev.filter((_, index) => index !== indexToRemove));
+    };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (content.trim()) {
-            onAddPost(content);
+        if (content.trim() || stagedImages.length > 0) {
+            onAddPost(content, stagedImages);
+
+            // Fix: Remove submitted URLs from the cleanup list to prevent them from being revoked.
+            createdObjectURLs.current = createdObjectURLs.current.filter(
+                url => !stagedImages.includes(url)
+            );
+            
             setContent('');
+            setStagedImages([]);
         }
     };
+    
+    const canPost = content.trim() || stagedImages.length > 0;
 
     return (
         <div className={`${theme.panelBg} p-4 rounded-md border ${theme.panelBorder} shadow-sm mb-6`}>
@@ -100,10 +155,50 @@ const PostCreator: React.FC<{
                         className={`w-full p-2 border ${theme.panelBorder} rounded-md text-sm resize-none focus:outline-none focus:ring-1 focus:ring-pink-500 ${theme.inputBg} ${theme.text}`}
                         rows={3}
                     />
-                    <div className="flex justify-end mt-2">
+
+                    {/* Staged Images Preview */}
+                    {stagedImages.length > 0 && (
+                        <div className="mt-2 grid gap-2 grid-cols-4">
+                            {stagedImages.map((imageUrl, index) => (
+                                <div key={index} className="relative group">
+                                    <img src={imageUrl} alt={`Preview ${index}`} className="w-full h-20 object-cover rounded-md" />
+                                    <button
+                                        type="button"
+                                        onClick={() => handleRemoveStagedImage(index)}
+                                        className="absolute top-1 right-1 bg-black bg-opacity-50 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        aria-label="Remove image"
+                                    >
+                                        <XIcon className="w-3 h-3" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    
+                    <div className="flex justify-between items-center mt-2">
+                        <div className="flex items-center space-x-2">
+                            <button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                title="Adicionar Foto"
+                                className={`p-2 rounded-full ${theme.subtleBgHover}`}
+                                disabled={stagedImages.length >= 4}
+                            >
+                                <ImageIcon className={`w-6 h-6 ${stagedImages.length >= 4 ? 'text-gray-400' : theme.subtleText}`} />
+                            </button>
+                             <input
+                                type="file"
+                                ref={fileInputRef}
+                                onChange={handleImageSelect}
+                                accept="image/*"
+                                multiple
+                                className="hidden"
+                            />
+                        </div>
+
                         <button
                             type="submit"
-                            disabled={!content.trim()}
+                            disabled={!canPost}
                             className={`${theme.button} ${theme.buttonText} text-sm font-bold py-1 px-5 rounded-md hover:opacity-90 disabled:bg-gray-400 disabled:cursor-not-allowed`}
                         >
                             Postar
@@ -138,6 +233,39 @@ const PostCard: React.FC<{
             setCommentText('');
         }
     };
+    
+    const renderImageGrid = () => {
+        if (!post.imageUrls || post.imageUrls.length === 0) return null;
+        
+        const count = post.imageUrls.length;
+        let gridClasses = '';
+        if (count === 1) gridClasses = 'grid-cols-1';
+        else if (count === 2) gridClasses = 'grid-cols-2';
+        else if (count === 3) gridClasses = 'grid-cols-2 grid-rows-2';
+        else gridClasses = 'grid-cols-2 grid-rows-2';
+
+        return (
+            <div className={`mt-3 grid gap-1 ${gridClasses} aspect-[4/3] rounded-lg overflow-hidden`}>
+                {post.imageUrls.slice(0, 4).map((url, index) => {
+                    let itemClasses = '';
+                    if (count === 3 && index === 0) {
+                        itemClasses = 'row-span-2';
+                    }
+                    return (
+                        <div key={index} className={`relative group ${itemClasses}`}>
+                             <img src={url} alt={`Post image ${index + 1}`} className="w-full h-full object-cover" />
+                             {count > 4 && index === 3 && (
+                                <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                                    <span className="text-white text-2xl font-bold">+{count - 4}</span>
+                                </div>
+                             )}
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    };
+
 
     return (
         <div className={`${theme.panelBg} p-4 rounded-md border ${theme.panelBorder} shadow-sm`}>
@@ -153,9 +281,14 @@ const PostCard: React.FC<{
             </div>
 
             {/* Post Content */}
-            <div className={`${theme.text} whitespace-pre-wrap`}>
-                {renderTextWithLinks(post.content, `${theme.link} hover:underline`)}
-            </div>
+            {post.content && (
+                <div className={`${theme.text} whitespace-pre-wrap`}>
+                    {renderTextWithLinks(post.content, `${theme.link} hover:underline`)}
+                </div>
+            )}
+
+            {/* Image Grid */}
+            {renderImageGrid()}
 
             {/* Link Preview */}
             {post.linkPreview && <LinkPreviewCard data={post.linkPreview} theme={theme} />}

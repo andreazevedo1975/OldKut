@@ -1,6 +1,7 @@
 
+
 import React, { useState, useRef, useEffect } from 'react';
-import type { User } from '../types';
+import type { User, Notification } from '../types';
 import { SearchIcon, BellIcon, MessageIcon, SparklesIcon, UserIcon, SettingsIcon, GroupIcon, NewspaperIcon } from './icons';
 import type { CurrentPage } from '../App';
 
@@ -12,12 +13,112 @@ interface HeaderProps {
     onLogout: () => void;
     theme: { [key: string]: string };
     onToggleChatbot: () => void;
+    notifications: Notification[];
+    users: { [key: string]: User };
+    onMarkNotificationsRead: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ currentUser, onSearch, onNavigate, onViewProfile, onLogout, theme, onToggleChatbot }) => {
+const timeAgo = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    
+    let interval = seconds / 31536000;
+    if (interval > 1) return Math.floor(interval) + "a";
+    
+    interval = seconds / 2592000;
+    if (interval > 1) return Math.floor(interval) + "m";
+
+    interval = seconds / 86400;
+    if (interval > 1) return Math.floor(interval) + "d";
+
+    interval = seconds / 3600;
+    if (interval > 1) return Math.floor(interval) + "h";
+
+    interval = seconds / 60;
+    if (interval > 1) return Math.floor(interval) + "min";
+
+    return Math.floor(seconds) + "s";
+};
+
+const NotificationDropdown: React.FC<{
+    notifications: Notification[],
+    currentUser: User,
+    users: { [key: string]: User },
+    theme: { [key: string]: string },
+    onNavigate: (page: CurrentPage) => void;
+    closeDropdown: () => void;
+}> = ({ notifications, currentUser, users, theme, onNavigate, closeDropdown }) => {
+    
+    const userNotifications = notifications
+        .filter(n => n.recipientId === currentUser.id)
+        .slice(0, 7); // Show latest 7 notifications
+
+    const getNotificationText = (n: Notification) => {
+        const actor = users[n.actorId];
+        if (!actor) return null;
+
+        switch (n.type) {
+            case 'new_like':
+                return <p><span className="font-bold">{actor.name}</span> curtiu sua postagem.</p>;
+            case 'new_comment':
+                 return <p><span className="font-bold">{actor.name}</span> comentou na sua postagem.</p>;
+            case 'friend_request':
+                 return <p><span className="font-bold">{actor.name}</span> enviou um pedido de amizade.</p>;
+            default:
+                return null;
+        }
+    };
+    
+    const handleNotificationClick = (n: Notification) => {
+        if(n.type === 'friend_request') {
+            onNavigate('friends');
+        }
+        // Could navigate to post in future: onNavigate('post', { postId: n.targetId })
+        closeDropdown();
+    };
+
+    return (
+        <div className={`absolute right-0 mt-2 w-80 ${theme.panelBg} rounded-md shadow-lg border ${theme.panelBorder} z-50 overflow-hidden`}>
+            <div className={`p-3 border-b ${theme.panelBorder}`}>
+                <h3 className={`font-bold ${theme.text}`}>Notificações</h3>
+            </div>
+            <div className="max-h-96 overflow-y-auto">
+                {userNotifications.length > 0 ? (
+                    userNotifications.map(n => {
+                        const actor = users[n.actorId];
+                        const text = getNotificationText(n);
+                        if (!actor || !text) return null;
+                        
+                        return (
+                             <button key={n.id} onClick={() => handleNotificationClick(n)} className={`w-full text-left flex items-start p-3 space-x-3 ${theme.subtleBgHover}`}>
+                                {!n.read && <div className="w-2.5 h-2.5 bg-blue-500 rounded-full mt-1 flex-shrink-0"></div>}
+                                <img src={actor.avatarUrl} alt={actor.name} className={`w-10 h-10 rounded-full ${n.read ? 'ml-5.5' : ''}`} />
+                                <div className="flex-1">
+                                    <div className={`text-sm ${theme.text}`}>
+                                        {text}
+                                    </div>
+                                    <p className={`text-xs mt-1 ${theme.subtleText}`}>{timeAgo(n.timestamp)} atrás</p>
+                                </div>
+                            </button>
+                        );
+                    })
+                ) : (
+                    <p className={`p-4 text-sm text-center ${theme.subtleText}`}>Você não tem notificações.</p>
+                )}
+            </div>
+        </div>
+    );
+};
+
+
+const Header: React.FC<HeaderProps> = ({ currentUser, onSearch, onNavigate, onViewProfile, onLogout, theme, onToggleChatbot, notifications, users, onMarkNotificationsRead }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+    
     const menuRef = useRef<HTMLDivElement>(null);
+    const notificationsRef = useRef<HTMLDivElement>(null);
 
     const handleSearchSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -26,11 +127,14 @@ const Header: React.FC<HeaderProps> = ({ currentUser, onSearch, onNavigate, onVi
         }
     };
 
-    // Close dropdown when clicking outside
+    // Close dropdowns when clicking outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
                 setIsMenuOpen(false);
+            }
+            if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
+                setIsNotificationsOpen(false);
             }
         };
         document.addEventListener("mousedown", handleClickOutside);
@@ -45,6 +149,15 @@ const Header: React.FC<HeaderProps> = ({ currentUser, onSearch, onNavigate, onVi
             <span>{label}</span>
         </button>
     );
+    
+    const unreadCount = notifications.filter(n => n.recipientId === currentUser.id && !n.read).length;
+    
+    const toggleNotifications = () => {
+        if (!isNotificationsOpen) {
+            onMarkNotificationsRead();
+        }
+        setIsNotificationsOpen(prev => !prev);
+    };
 
     return (
         <header className={`${theme.header} ${theme.headerText} shadow-md`}>
@@ -83,9 +196,24 @@ const Header: React.FC<HeaderProps> = ({ currentUser, onSearch, onNavigate, onVi
                     <button title="Recados" onClick={() => onViewProfile(currentUser.id, { initialTab: 'scraps' })} className="hover:bg-white/20 p-2 rounded-full transition-colors">
                         <MessageIcon className="w-6 h-6" />
                     </button>
-                     <button title="Notificações (Em breve)" className="hover:bg-white/20 p-2 rounded-full transition-colors cursor-not-allowed">
-                        <BellIcon className="w-6 h-6" />
-                    </button>
+                    <div className="relative" ref={notificationsRef}>
+                        <button onClick={toggleNotifications} title="Notificações" className="relative hover:bg-white/20 p-2 rounded-full transition-colors">
+                            <BellIcon className="w-6 h-6" />
+                            {unreadCount > 0 && (
+                                <span className="absolute top-0 right-0 block h-4 w-4 rounded-full bg-red-500 text-white text-[10px] ring-2 ring-white/50">{unreadCount}</span>
+                            )}
+                        </button>
+                        {isNotificationsOpen && (
+                            <NotificationDropdown
+                                notifications={notifications}
+                                currentUser={currentUser}
+                                users={users}
+                                theme={theme}
+                                onNavigate={onNavigate}
+                                closeDropdown={() => setIsNotificationsOpen(false)}
+                            />
+                        )}
+                    </div>
                     
                     <div className="relative" ref={menuRef}>
                         <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="flex items-center space-x-2">

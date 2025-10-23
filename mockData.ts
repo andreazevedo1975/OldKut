@@ -1,4 +1,4 @@
-import type { User, Scrap, Testimonial, Community, Post, ChatMessage, Album, Photo, Video, Playlist, ProfileVisit } from './types';
+import type { User, Scrap, Testimonial, Community, Post, ChatMessage, Album, Photo, Video, Playlist, ProfileVisit, Notification } from './types';
 
 // USERS
 export const MOCK_USERS: { [key: string]: User } = {
@@ -21,7 +21,8 @@ export const MOCK_USERS: { [key: string]: User } = {
         friendRequests: ['user-5'],
         sentRequests: [],
         communities: [1, 3],
-        blockedUserIds: [],
+        emailNotifications: true,
+        blockedUserIds: ['user-6'],
     },
     'user-2': {
         id: 'user-2',
@@ -42,6 +43,7 @@ export const MOCK_USERS: { [key: string]: User } = {
         friendRequests: [],
         sentRequests: ['user-6'],
         communities: [1, 2],
+        emailNotifications: true,
         blockedUserIds: [],
     },
     'user-3': {
@@ -63,6 +65,7 @@ export const MOCK_USERS: { [key: string]: User } = {
         friendRequests: [],
         sentRequests: [],
         communities: [3],
+        emailNotifications: false,
         blockedUserIds: [],
     },
     'user-4': {
@@ -84,6 +87,7 @@ export const MOCK_USERS: { [key: string]: User } = {
         friendRequests: [],
         sentRequests: [],
         communities: [2],
+        emailNotifications: true,
         blockedUserIds: [],
     },
     'user-5': {
@@ -105,6 +109,7 @@ export const MOCK_USERS: { [key: string]: User } = {
         friendRequests: [],
         sentRequests: ['user-1'],
         communities: [1],
+        emailNotifications: true,
         blockedUserIds: [],
     },
      'user-6': {
@@ -126,6 +131,7 @@ export const MOCK_USERS: { [key: string]: User } = {
         friendRequests: ['user-2'],
         sentRequests: [],
         communities: [2],
+        emailNotifications: true,
         blockedUserIds: [],
     }
 };
@@ -147,7 +153,11 @@ export const MOCK_POSTS: Post[] = [
         comments: [
             { id: 1, authorId: 'user-1', content: 'Que legal, Bruno! Boas fotos!', timestamp: new Date(Date.now() - 86400000 * 0.9).toISOString() }
         ],
-        linkPreview: null
+        linkPreview: null,
+        imageUrls: [
+            'https://picsum.photos/seed/rio1/600/400',
+            'https://picsum.photos/seed/rio2/600/400'
+        ]
     },
     {
         id: 2, authorId: 'user-3',
@@ -155,7 +165,8 @@ export const MOCK_POSTS: Post[] = [
         timestamp: new Date(Date.now() - 86400000 * 2).toISOString(),
         likedByIds: ['user-1'],
         comments: [],
-        linkPreview: null
+        linkPreview: null,
+        imageUrls: []
     },
     {
         id: 3, authorId: 'user-1',
@@ -163,7 +174,8 @@ export const MOCK_POSTS: Post[] = [
         timestamp: new Date(Date.now() - 86400000 * 0.5).toISOString(),
         likedByIds: ['user-2', 'user-3'],
         comments: [],
-        linkPreview: null // App.tsx will generate this
+        linkPreview: null, // App.tsx will generate this
+        imageUrls: []
     }
 ];
 
@@ -212,4 +224,34 @@ export const MOCK_PROFILE_VISITS: ProfileVisit[] = [
     { visitorId: 'user-2', visitedId: 'user-1', timestamp: new Date(Date.now() - 3600000 * 1).toISOString() },
     { visitorId: 'user-3', visitedId: 'user-1', timestamp: new Date(Date.now() - 3600000 * 3).toISOString() },
     { visitorId: 'user-4', visitedId: 'user-1', timestamp: new Date(Date.now() - 3600000 * 5).toISOString() },
+];
+
+// NOTIFICATIONS
+export const MOCK_NOTIFICATIONS: Notification[] = [
+  {
+    id: 1,
+    recipientId: 'user-1',
+    actorId: 'user-3',
+    type: 'new_like',
+    targetId: 3, // Post about the recipe
+    read: false,
+    timestamp: new Date(Date.now() - 3600000 * 2).toISOString(), // 2 hours ago
+  },
+  {
+    id: 2,
+    recipientId: 'user-2', // Belongs to another user, should not be visible to user-1
+    actorId: 'user-1',
+    type: 'new_comment',
+    targetId: 1, // Post about Rio
+    read: true,
+    timestamp: new Date(Date.now() - 3600000 * 5).toISOString(), // 5 hours ago
+  },
+   {
+    id: 3,
+    recipientId: 'user-1', // This is a friend request, should be visible
+    actorId: 'user-5',
+    type: 'friend_request',
+    read: true,
+    timestamp: new Date(Date.now() - 3600000 * 24).toISOString(), // 1 day ago
+  },
 ];

@@ -9,10 +9,9 @@ interface CommunityDetailPageProps {
     currentUser: User;
     onToggleCommunity: (communityId: number) => void;
     onNavigate: (page: CurrentPage) => void;
-    onViewProfile: (userId: string) => void;
 }
 
-const CommunityDetailPage: React.FC<CommunityDetailPageProps> = ({ community, currentUser, onToggleCommunity, onNavigate, onViewProfile }) => {
+const CommunityDetailPage: React.FC<CommunityDetailPageProps> = ({ community, currentUser, onToggleCommunity, onNavigate }) => {
     const communityTheme = THEMES[community.theme] || THEMES.classic;
     const isMember = currentUser.communities.includes(community.id);
 
@@ -25,18 +24,10 @@ const CommunityDetailPage: React.FC<CommunityDetailPageProps> = ({ community, cu
         { id: 5, title: "Tópico de Off-topic!", author: "Ana", replies: 102, lastReply: '3 dias atrás' },
     ];
 
-    // This is a rough way to create a themed background without Tailwind supporting dynamic class construction.
-    // In a real app, you might use CSS variables.
-    const headerStyle = {
-      backgroundColor: communityTheme.subtleBg.startsWith('bg-') ? undefined : communityTheme.subtleBg,
-    };
-    const headerClass = communityTheme.subtleBg.startsWith('bg-') ? communityTheme.subtleBg : '';
-
-
     return (
         <div className={`${communityTheme.panelBg} rounded-md border ${communityTheme.panelBorder} shadow-sm overflow-hidden`}>
             {/* Community Header */}
-            <div className={`p-4 md:p-6 border-b ${communityTheme.panelBorder} flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${headerClass}`} style={headerStyle}>
+            <div className={`p-4 md:p-6 border-b ${communityTheme.panelBorder} flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${communityTheme.subtleBg}`}>
                 <div className="flex items-center space-x-4">
                     <img src={community.imageUrl} alt={community.name} className="w-20 h-20 md:w-24 md:h-24 rounded-md border-2 border-white shadow-md" />
                     <div>

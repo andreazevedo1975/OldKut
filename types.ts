@@ -19,6 +19,7 @@ export interface User {
   friendRequests: string[]; // array of user ids (INCOMING)
   sentRequests: string[]; // array of user ids (OUTGOING)
   communities: number[]; // array of community ids
+  emailNotifications: boolean;
   blockedUserIds: string[]; // array of user ids
 }
 
@@ -80,6 +81,7 @@ export interface Post {
   likedByIds: string[];
   comments: PostComment[];
   linkPreview?: LinkPreviewData | null;
+  imageUrls?: string[];
 }
 
 export interface ProfileVisit {

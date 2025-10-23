@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { User, Post, Community } from '../types';
-import { UserIcon, NewspaperIcon, GroupIcon } from './icons';
+import { UserIcon, NewspaperIcon, GroupIcon, ArrowDownIcon, ArrowUpIcon } from './icons';
 
 interface SearchPageProps {
     query: string;
@@ -48,27 +48,62 @@ const SearchPage: React.FC<SearchPageProps> = ({
     onViewCommunity, 
     theme 
 }) => {
-    const lowercasedQuery = query.toLowerCase();
+    const [showAdvanced, setShowAdvanced] = useState(false);
+    const [locationFilter, setLocationFilter] = useState('');
+    const [dateFromFilter, setDateFromFilter] = useState('');
+    const [dateToFilter, setDateToFilter] = useState('');
 
-    // Memoize filtered results to avoid re-computation on every render.
+    const lowercasedQuery = query.toLowerCase();
+    const lowercasedLocation = locationFilter.toLowerCase();
+
+    const hasActiveFilters = query || locationFilter || dateFromFilter || dateToFilter;
+    
+    const handleClearAdvanced = () => {
+        setLocationFilter('');
+        setDateFromFilter('');
+        setDateToFilter('');
+    };
+
     const filteredUsers = useMemo(() => {
-        if (!lowercasedQuery) return [];
-        return allUsers.filter(user => user.name.toLowerCase().includes(lowercasedQuery) && user.id !== currentUser.id);
-    }, [allUsers, lowercasedQuery, currentUser.id]);
+        if (!hasActiveFilters) return [];
+        return allUsers.filter(user => {
+            if (user.id === currentUser.id) return false;
+            const nameMatch = lowercasedQuery ? user.name.toLowerCase().includes(lowercasedQuery) : true;
+            const locationMatch = lowercasedLocation
+                ? user.city.toLowerCase().includes(lowercasedLocation) || user.country.toLowerCase().includes(lowercasedLocation)
+                : true;
+            // Only include if it matches active filters
+            return nameMatch && locationMatch;
+        });
+    }, [allUsers, lowercasedQuery, lowercasedLocation, currentUser.id, hasActiveFilters]);
 
     const filteredPosts = useMemo(() => {
-        if (!lowercasedQuery) return [];
-        return posts.filter(post => post.content.toLowerCase().includes(lowercasedQuery));
-    }, [posts, lowercasedQuery]);
+        if (!hasActiveFilters) return [];
+        const fromDate = dateFromFilter ? new Date(dateFromFilter) : null;
+        if (fromDate) fromDate.setHours(0, 0, 0, 0); // Start of day
+        const toDate = dateToFilter ? new Date(dateToFilter) : null;
+        if (toDate) toDate.setHours(23, 59, 59, 999); // End of day
+
+        return posts.filter(post => {
+            const contentMatch = lowercasedQuery ? post.content.toLowerCase().includes(lowercasedQuery) : true;
+            const postDate = new Date(post.timestamp);
+            
+            const dateMatch =
+                (!fromDate || postDate >= fromDate) &&
+                (!toDate || postDate <= toDate);
+
+            return contentMatch && dateMatch;
+        });
+    }, [posts, lowercasedQuery, dateFromFilter, dateToFilter, hasActiveFilters]);
 
     const filteredCommunities = useMemo(() => {
+        // Communities only filter by main query
         if (!lowercasedQuery) return [];
         return communities.filter(community => community.name.toLowerCase().includes(lowercasedQuery));
     }, [communities, lowercasedQuery]);
 
     const totalResults = filteredUsers.length + filteredPosts.length + filteredCommunities.length;
     
-    // A reusable container for each search category.
     const ResultSection: React.FC<{ title: string; count: number; icon: React.ReactNode; children: React.ReactNode }> = ({ title, count, icon, children }) => (
         <section>
             <div className={`flex items-center space-x-2 border-b ${theme.panelBorder} pb-2 mb-4`}>
@@ -86,18 +121,61 @@ const SearchPage: React.FC<SearchPageProps> = ({
 
     return (
         <div className={`${theme.panelBg} p-6 rounded-md border ${theme.panelBorder} shadow-sm`}>
-            <h2 className={`text-xl font-light ${theme.subtleText} mb-6`}>
-                Resultados da busca por: <span className={`font-semibold ${theme.text}`}>{query}</span>
-            </h2>
-            
-            {totalResults === 0 && !query ? (
-                 <div className="text-center py-12">
-                    <p className={`${theme.text}`}>Use a barra de busca no topo para encontrar pessoas, posts e comunidades.</p>
+            <div className={`border-b ${theme.panelBorder} pb-4 mb-6`}>
+                <h2 className={`text-xl font-light ${theme.subtleText}`}>
+                    Resultados da busca {query && <>por: <span className={`font-semibold ${theme.text}`}>{query}</span></>}
+                </h2>
+                <div className="mt-4">
+                     <button onClick={() => setShowAdvanced(p => !p)} className={`flex items-center space-x-1 text-sm ${theme.link} hover:underline`}>
+                        <span>Filtros Avançados</span>
+                        {showAdvanced ? <ArrowUpIcon className="w-4 h-4" /> : <ArrowDownIcon className="w-4 h-4" />}
+                    </button>
+                    {showAdvanced && (
+                        <div className={`mt-3 p-4 rounded-md ${theme.subtleBg} border ${theme.panelBorder} space-y-4`}>
+                             <div>
+                                <label className={`block text-sm font-semibold ${theme.subtleText} mb-1`}>Filtrar usuários por localização</label>
+                                <input
+                                    type="text"
+                                    placeholder="Cidade ou país..."
+                                    value={locationFilter}
+                                    onChange={(e) => setLocationFilter(e.target.value)}
+                                    className={`w-full md:w-1/2 p-2 border ${theme.panelBorder} rounded-sm text-sm focus:outline-none focus:ring-1 focus:ring-pink-500 ${theme.inputBg} ${theme.text}`}
+                                />
+                            </div>
+                            <div>
+                                <label className={`block text-sm font-semibold ${theme.subtleText} mb-1`}>Filtrar posts por data</label>
+                                <div className="flex flex-col md:flex-row items-center gap-2">
+                                     <input
+                                        type="date"
+                                        value={dateFromFilter}
+                                        onChange={(e) => setDateFromFilter(e.target.value)}
+                                        className={`w-full md:w-auto p-2 border ${theme.panelBorder} rounded-sm text-sm focus:outline-none focus:ring-1 focus:ring-pink-500 ${theme.inputBg} ${theme.text}`}
+                                    />
+                                    <span className={theme.subtleText}>até</span>
+                                     <input
+                                        type="date"
+                                        value={dateToFilter}
+                                        onChange={(e) => setDateToFilter(e.target.value)}
+                                        className={`w-full md:w-auto p-2 border ${theme.panelBorder} rounded-sm text-sm focus:outline-none focus:ring-1 focus:ring-pink-500 ${theme.inputBg} ${theme.text}`}
+                                    />
+                                </div>
+                            </div>
+                            <button onClick={handleClearAdvanced} className="text-xs bg-gray-200 text-gray-700 font-semibold px-2 py-1 rounded-md hover:bg-gray-300">
+                                Limpar Filtros
+                            </button>
+                        </div>
+                    )}
                 </div>
-            ) : totalResults === 0 && query ? (
+            </div>
+            
+            {!hasActiveFilters ? (
+                 <div className="text-center py-12">
+                    <p className={`${theme.text}`}>Use a barra de busca ou os filtros avançados para encontrar pessoas, posts e comunidades.</p>
+                </div>
+            ) : totalResults === 0 ? (
                 <div className="text-center py-12">
-                    <p className={`${theme.text}`}>Nenhum resultado encontrado.</p>
-                    <p className={`${theme.subtleText} text-sm`}>Tente usar termos de busca diferentes.</p>
+                    <p className={`${theme.text}`}>Nenhum resultado encontrado para os filtros aplicados.</p>
+                    <p className={`${theme.subtleText} text-sm`}>Tente usar termos de busca diferentes ou ajustar os filtros.</p>
                 </div>
             ) : (
                 <div className="space-y-8">
@@ -109,7 +187,7 @@ const SearchPage: React.FC<SearchPageProps> = ({
                                     <img src={user.avatarUrl} alt={user.name} className="w-10 h-10 rounded-full" />
                                     <div>
                                         <p className={`text-sm font-bold ${theme.text}`}>{highlightQuery(user.name, query)}</p>
-                                        <p className={`text-xs ${theme.subtleText}`}>{user.city}</p>
+                                        <p className={`text-xs ${theme.subtleText}`}>{highlightQuery(`${user.city}, ${user.country}`, locationFilter)}</p>
                                     </div>
                                 </div>
                                 <button onClick={() => onViewProfile(user.id)} className={`${theme.button} ${theme.buttonText} text-xs font-bold py-1 px-3 rounded-md hover:opacity-90`}>
@@ -141,23 +219,25 @@ const SearchPage: React.FC<SearchPageProps> = ({
                         })}
                     </ResultSection>
 
-                    {/* Communities Section */}
-                    <ResultSection title="Comunidades" count={filteredCommunities.length} icon={<GroupIcon className={`w-6 h-6 ${theme.text}`} />}>
-                        {filteredCommunities.map(community => (
-                             <div key={community.id} className={`flex items-center justify-between p-2 ${theme.subtleBg} rounded-md`}>
-                                <div className="flex items-center space-x-3">
-                                    <img src={community.imageUrl} alt={community.name} className="w-10 h-10 rounded-sm" />
-                                    <div>
-                                        <p className={`text-sm font-bold ${theme.text}`}>{highlightQuery(community.name, query)}</p>
-                                        <p className={`text-xs ${theme.subtleText}`}>{community.members.toLocaleString()} membros</p>
+                    {/* Communities Section (only shows if main query is used) */}
+                    {query && (
+                        <ResultSection title="Comunidades" count={filteredCommunities.length} icon={<GroupIcon className={`w-6 h-6 ${theme.text}`} />}>
+                            {filteredCommunities.map(community => (
+                                 <div key={community.id} className={`flex items-center justify-between p-2 ${theme.subtleBg} rounded-md`}>
+                                    <div className="flex items-center space-x-3">
+                                        <img src={community.imageUrl} alt={community.name} className="w-10 h-10 rounded-sm" />
+                                        <div>
+                                            <p className={`text-sm font-bold ${theme.text}`}>{highlightQuery(community.name, query)}</p>
+                                            <p className={`text-xs ${theme.subtleText}`}>{community.members.toLocaleString()} membros</p>
+                                        </div>
                                     </div>
+                                    <button onClick={() => onViewCommunity(community.id)} className={`${theme.button} ${theme.buttonText} text-xs font-bold py-1 px-3 rounded-md hover:opacity-90`}>
+                                        Ver Comunidade
+                                    </button>
                                 </div>
-                                <button onClick={() => onViewCommunity(community.id)} className={`${theme.button} ${theme.buttonText} text-xs font-bold py-1 px-3 rounded-md hover:opacity-90`}>
-                                    Ver Comunidade
-                                </button>
-                            </div>
-                        ))}
-                    </ResultSection>
+                            ))}
+                        </ResultSection>
+                    )}
                 </div>
             )}
         </div>

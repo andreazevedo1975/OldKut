@@ -1,6 +1,8 @@
+
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type { Album, Photo } from '../types';
-import { FolderPlusIcon, ArrowUpTrayIcon, TrashIcon, CameraIcon, ArrowUpIcon, ArrowDownIcon } from './icons';
+import { FolderPlusIcon, ArrowUpTrayIcon, TrashIcon, CameraIcon, ArrowUpIcon, ArrowDownIcon, PencilIcon, CheckCircleIcon, XIcon, ChevronLeftIcon, ChevronRightIcon } from './icons';
 
 interface PhotosPageProps {
     theme: { [key: string]: string };
@@ -8,9 +10,75 @@ interface PhotosPageProps {
     onCreateAlbum: (name: string) => void;
     onAddPhotos: (albumId: string, photos: Photo[]) => void;
     onDeletePhoto: (albumId: string, photoId: string) => void;
+    onEditAlbumName: (albumId: string, newName: string) => void;
 }
 
-const PhotosPage: React.FC<PhotosPageProps> = ({ theme, albums, onCreateAlbum, onAddPhotos, onDeletePhoto }) => {
+const Lightbox: React.FC<{
+    photos: Photo[];
+    startIndex: number;
+    onClose: () => void;
+}> = ({ photos, startIndex, onClose }) => {
+    const [currentIndex, setCurrentIndex] = useState(startIndex);
+
+    const goToPrevious = () => {
+        setCurrentIndex(prevIndex => (prevIndex === 0 ? photos.length - 1 : prevIndex - 1));
+    };
+
+    const goToNext = () => {
+        setCurrentIndex(prevIndex => (prevIndex === photos.length - 1 ? 0 : prevIndex + 1));
+    };
+    
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onClose();
+            if (e.key === 'ArrowLeft') goToPrevious();
+            if (e.key === 'ArrowRight') goToNext();
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    if (photos.length === 0) return null;
+    const currentPhoto = photos[currentIndex];
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[100]" onClick={onClose}>
+            <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="absolute top-4 right-4 text-white text-3xl hover:opacity-80">
+                <XIcon className="w-8 h-8"/>
+            </button>
+            
+            {photos.length > 1 && (
+                <button
+                    onClick={(e) => { e.stopPropagation(); goToPrevious(); }}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 p-2 bg-white/20 rounded-full hover:bg-white/30 text-white"
+                >
+                    <ChevronLeftIcon className="w-8 h-8"/>
+                </button>
+            )}
+
+            <div className="relative max-w-[90vw] max-h-[85vh]" onClick={e => e.stopPropagation()}>
+                <img src={currentPhoto.url} alt={currentPhoto.name} className="max-w-full max-h-[85vh] object-contain" />
+                 <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 text-center text-white">
+                    <p>{currentPhoto.name}</p>
+                    <p className="text-sm opacity-80">{currentIndex + 1} / {photos.length}</p>
+                </div>
+            </div>
+
+            {photos.length > 1 && (
+                <button
+                    onClick={(e) => { e.stopPropagation(); goToNext(); }}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 p-2 bg-white/20 rounded-full hover:bg-white/30 text-white"
+                >
+                    <ChevronRightIcon className="w-8 h-8"/>
+                </button>
+            )}
+        </div>
+    );
+};
+
+
+const PhotosPage: React.FC<PhotosPageProps> = ({ theme, albums, onCreateAlbum, onAddPhotos, onDeletePhoto, onEditAlbumName }) => {
     const [view, setView] = useState<'list' | 'album'>('list');
     const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -19,6 +87,9 @@ const PhotosPage: React.FC<PhotosPageProps> = ({ theme, albums, onCreateAlbum, o
     const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
     const [sortConfig, setSortConfig] = useState<{ key: 'uploadDate' | 'name'; direction: 'asc' | 'desc' }>({ key: 'uploadDate', direction: 'desc' });
     const [photoToDelete, setPhotoToDelete] = useState<Photo | null>(null);
+    const [lightboxState, setLightboxState] = useState<{ isOpen: boolean; startIndex: number }>({ isOpen: false, startIndex: 0 });
+    const [editingAlbum, setEditingAlbum] = useState<{ id: string; name: string } | null>(null);
+
     const fileInputRef = useRef<HTMLInputElement>(null);
     const createdObjectURLs = useRef<string[]>([]);
 
@@ -82,13 +153,21 @@ const PhotosPage: React.FC<PhotosPageProps> = ({ theme, albums, onCreateAlbum, o
     const confirmDelete = () => {
         if (photoToDelete && selectedAlbumId) {
             onDeletePhoto(selectedAlbumId, photoToDelete.id);
+            // Fix: Revoke the object URL to prevent memory leaks.
             const urlToRevoke = createdObjectURLs.current.find(url => url === photoToDelete.url);
-            if(urlToRevoke) {
+            if (urlToRevoke) {
                 URL.revokeObjectURL(urlToRevoke);
                 createdObjectURLs.current = createdObjectURLs.current.filter(url => url !== urlToRevoke);
             }
         }
         setPhotoToDelete(null);
+    };
+    
+    const handleSaveAlbumName = () => {
+        if (editingAlbum && editingAlbum.name.trim()) {
+            onEditAlbumName(editingAlbum.id, editingAlbum.name.trim());
+        }
+        setEditingAlbum(null);
     };
 
     const selectedAlbum = useMemo(() => albums.find(a => a.id === selectedAlbumId), [albums, selectedAlbumId]);
@@ -129,17 +208,22 @@ const PhotosPage: React.FC<PhotosPageProps> = ({ theme, albums, onCreateAlbum, o
             {albums.length > 0 ? (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {albums.map(album => (
-                        <button key={album.id} onClick={() => { setSelectedAlbumId(album.id); setView('album'); }} className="text-center group">
-                            <div className={`relative w-full aspect-square ${theme.subtleBg} rounded-lg flex items-center justify-center border ${theme.panelBorder} group-hover:shadow-lg transition-shadow`}>
-                                <FolderPlusIcon className={`w-16 h-16 ${theme.subtleText}`} />
-                                {album.photos.length > 0 && (
-                                    <img src={album.photos[0].url} alt="Capa do álbum" className="absolute inset-0 w-full h-full object-cover rounded-lg" />
-                                )}
-                                <div className="absolute inset-0 bg-black bg-opacity-20 group-hover:bg-opacity-40 transition-opacity rounded-lg"></div>
-                                <span className="absolute bottom-2 left-2 bg-black bg-opacity-50 text-white text-xs px-1.5 py-0.5 rounded-full">{album.photos.length} fotos</span>
+                        <div key={album.id} className="text-center group">
+                            <button onClick={() => { setSelectedAlbumId(album.id); setView('album'); }} className="relative w-full aspect-square block">
+                                <div className={`w-full h-full ${theme.subtleBg} rounded-lg flex items-center justify-center border ${theme.panelBorder} group-hover:shadow-lg transition-shadow`}>
+                                    <FolderPlusIcon className={`w-16 h-16 ${theme.subtleText}`} />
+                                    {album.photos.length > 0 && (
+                                        <img src={album.photos[0].url} alt="Capa do álbum" className="absolute inset-0 w-full h-full object-cover rounded-lg" />
+                                    )}
+                                    <div className="absolute inset-0 bg-black bg-opacity-20 group-hover:bg-opacity-40 transition-opacity rounded-lg"></div>
+                                    <span className="absolute bottom-2 left-2 bg-black bg-opacity-50 text-white text-xs px-1.5 py-0.5 rounded-full">{album.photos.length} fotos</span>
+                                </div>
+                            </button>
+                            <div className="mt-2 text-sm font-semibold flex items-center justify-center gap-2">
+                                <p className={`${theme.link} group-hover:underline`}>{album.name}</p>
+                                <button onClick={() => setEditingAlbum({id: album.id, name: album.name})} className={`${theme.subtleText} opacity-0 group-hover:opacity-100 transition-opacity`}><PencilIcon className="w-4 h-4" /></button>
                             </div>
-                            <p className={`mt-2 text-sm font-semibold ${theme.link} group-hover:underline`}>{album.name}</p>
-                        </button>
+                        </div>
                     ))}
                 </div>
             ) : (
@@ -162,7 +246,10 @@ const PhotosPage: React.FC<PhotosPageProps> = ({ theme, albums, onCreateAlbum, o
                 <div className="flex justify-between items-start mb-4">
                     <div>
                         <button onClick={() => setView('list')} className={`text-sm ${theme.link} hover:underline`}>&larr; Voltar para Álbuns</button>
-                        <h2 className={`text-2xl font-bold ${theme.text} mt-1`}>{selectedAlbum.name}</h2>
+                        <div className="flex items-center gap-2 mt-1">
+                             <h2 className={`text-2xl font-bold ${theme.text}`}>{selectedAlbum.name}</h2>
+                             <button onClick={() => setEditingAlbum({id: selectedAlbum.id, name: selectedAlbum.name})} className={`${theme.subtleText} hover:text-pink-500`}><PencilIcon className="w-5 h-5" /></button>
+                        </div>
                     </div>
                     <div>
                          <button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className={`${theme.button} ${theme.buttonText} font-bold py-1.5 px-4 rounded-md hover:opacity-90 text-sm flex items-center space-x-2 disabled:bg-gray-400 disabled:cursor-wait`}>
@@ -196,14 +283,15 @@ const PhotosPage: React.FC<PhotosPageProps> = ({ theme, albums, onCreateAlbum, o
 
                 {sortedPhotos.length > 0 ? (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                        {sortedPhotos.map(photo => (
+                        {sortedPhotos.map((photo, index) => (
                             <div key={photo.id} className="relative group">
-                                <img src={photo.url} alt={photo.name} className={`w-full aspect-square object-cover rounded-lg border ${theme.panelBorder}`} />
-                                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-opacity rounded-lg flex items-center justify-center">
-                                    <button onClick={() => handleDeleteClick(photo)} className="absolute top-2 right-2 p-1.5 bg-black bg-opacity-50 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600">
-                                        <TrashIcon className="w-4 h-4" />
-                                    </button>
-                                </div>
+                                <button onClick={() => setLightboxState({ isOpen: true, startIndex: index })} className="block w-full">
+                                    <img src={photo.url} alt={photo.name} className={`w-full aspect-square object-cover rounded-lg border ${theme.panelBorder}`} />
+                                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-opacity rounded-lg flex items-center justify-center"></div>
+                                </button>
+                                <button onClick={() => handleDeleteClick(photo)} className="absolute top-2 right-2 p-1.5 bg-black bg-opacity-50 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600">
+                                    <TrashIcon className="w-4 h-4" />
+                                </button>
                                  <p className={`text-xs ${theme.subtleText} mt-1 truncate`} title={photo.name}>{photo.name}</p>
                             </div>
                         ))}
@@ -223,6 +311,14 @@ const PhotosPage: React.FC<PhotosPageProps> = ({ theme, albums, onCreateAlbum, o
         <div className={`${theme.panelBg} p-6 rounded-md border ${theme.panelBorder} shadow-sm`}>
             {view === 'list' ? renderAlbumList() : renderAlbumDetail()}
 
+            {lightboxState.isOpen && selectedAlbum && (
+                <Lightbox 
+                    photos={sortedPhotos}
+                    startIndex={lightboxState.startIndex}
+                    onClose={() => setLightboxState({ isOpen: false, startIndex: 0 })}
+                />
+            )}
+
             {isCreateModalOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                     <div className={`${theme.panelBg} p-6 rounded-lg shadow-xl w-full max-w-sm border ${theme.panelBorder}`}>
@@ -235,6 +331,19 @@ const PhotosPage: React.FC<PhotosPageProps> = ({ theme, albums, onCreateAlbum, o
                                 <button type="submit" className={`${theme.button} ${theme.buttonText} text-sm font-bold py-1.5 px-5 rounded-md hover:opacity-90`}>Criar</button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+            
+            {editingAlbum && (
+                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className={`${theme.panelBg} p-6 rounded-lg shadow-xl w-full max-w-sm border ${theme.panelBorder}`}>
+                        <h3 className={`text-lg font-bold ${theme.text} mb-4`}>Editar Nome do Álbum</h3>
+                         <input type="text" value={editingAlbum.name} onChange={(e) => setEditingAlbum(prev => ({...prev!, name: e.target.value}))} className={`w-full p-2 border ${theme.panelBorder} rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-pink-500 ${theme.inputBg} ${theme.text}`} autoFocus />
+                         <div className="flex justify-end space-x-3 mt-4">
+                            <button type="button" onClick={() => setEditingAlbum(null)} className="bg-gray-200 text-gray-800 text-sm font-bold py-1.5 px-5 rounded-md hover:bg-gray-300">Cancelar</button>
+                            <button type="button" onClick={handleSaveAlbumName} className={`${theme.button} ${theme.buttonText} text-sm font-bold py-1.5 px-5 rounded-md hover:opacity-90`}>Salvar</button>
+                        </div>
                     </div>
                 </div>
             )}
